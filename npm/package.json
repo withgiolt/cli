@@ -1,5 +1,5 @@
 {
-  "name": "giolt",
+  "name": "@giolt/cli",
   "version": "0.0.0",
   "description": "Build, run and deploy Gleam apps on Giolt",
   "license": "GPL-3.0-or-later AND Apache-2.0",
@@ -18,5 +18,8 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

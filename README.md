@@ -2,7 +2,19 @@
 
 Build, run and deploy Gleam apps on [Giolt](https://giolt.com).
 
-Add it as a dev dependency and run it. It works on Node 20 or newer, which is
+Install it globally with npm or Bun. It needs Node 20 or newer:
+
+```sh
+npm i -g @giolt/cli
+bun i -g @giolt/cli
+giolt build
+```
+
+`bun i -g` links a script that starts with `#!/usr/bin/env node`, so a machine
+with only Bun installed needs Node too, or can run `bunx --bun @giolt/cli build`
+instead.
+
+Or add it as a dev dependency and run it. It works on Node 20 or newer, which is
 Gleam's default JavaScript runtime, and on Bun:
 
 ```sh
