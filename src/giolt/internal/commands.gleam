@@ -140,7 +140,7 @@ pub fn link_project(
 ) -> Promise(Result(Nil, String)) {
   let path = option.unwrap(config_path, "gleam.toml")
   case simplifile.read(path) {
-    Error(_) -> promise.resolve(Error("Could not read " <> path <> "."))
+    Error(_) -> promise.resolve(Error(cannot_read(path)))
     Ok(source) -> {
       use _, client <- signed_in()
       use project <- promise.map(api_call(api.find_project(client, name)))
@@ -170,7 +170,7 @@ pub fn unlink_project(
   promise.resolve({
     use source <- result.try(
       simplifile.read(path)
-      |> result.replace_error("Could not read " <> path <> "."),
+      |> result.replace_error(cannot_read(path)),
     )
     use edited <- result.try(
       link.remove_project(source) |> result.replace_error(cannot_edit(path)),
@@ -183,6 +183,14 @@ pub fn unlink_project(
       }
     }
   })
+}
+
+fn cannot_read(path: String) -> String {
+  case path {
+    "gleam.toml" ->
+      "Could not read gleam.toml. Run this from the root of a Gleam project."
+    _ -> "Could not read " <> path <> "."
+  }
 }
 
 fn cannot_edit(path: String) -> String {
