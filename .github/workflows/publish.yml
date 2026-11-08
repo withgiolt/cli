@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish:
+  publish-hex:
     environment: Production
     runs-on: ubuntu-latest
     permissions:
@@ -37,14 +37,32 @@ jobs:
         env:
           HEXPM_API_KEY: ${{ secrets.HEXPM_API_KEY }}
 
+  publish-npm:
+    environment: Production
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: extractions/setup-just@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          gleam-version: "1.19"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Install dependencies
+        run: gleam deps download
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
       - name: Publish to npm
         run: |
           just build-npm
-          npm publish ./dist --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          npm publish ./dist
