@@ -259,10 +259,3 @@ pub fn describe_error(error: Error) -> String {
       <> "  Pick an `outdir` outside the compiled Gleam output."
   }
 }
-
-pub fn discard_output(result: Result(Output, Error)) -> Result(Nil, String) {
-  case result {
-    Ok(_) -> Ok(Nil)
-    Error(error) -> Error(describe_error(error))
-  }
-}
