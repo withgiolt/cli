@@ -9,19 +9,9 @@ pub fn installed(directory: String, files: List(String)) -> Bool {
   })
 }
 
-@target(javascript)
 @external(javascript, "./ffi_npm.mjs", "install")
 pub fn install(
   url: String,
   directory: String,
   files: List(String),
 ) -> Promise(Result(Nil, String))
-
-@target(erlang)
-pub fn install(
-  _url: String,
-  _directory: String,
-  _files: List(String),
-) -> Promise(Result(Nil, String)) {
-  promise.resolve(Error("Giolt only supports the `javascript` target."))
-}

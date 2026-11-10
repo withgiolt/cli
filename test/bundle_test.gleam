@@ -1,10 +1,6 @@
 import giolt/internal/bundle
 import gleam/string
 
-pub fn default_outdir_test() {
-  assert bundle.default_outdir == "./dist"
-}
-
 pub fn describe_error_entry_file_not_found_test() {
   let message =
     bundle.describe_error(bundle.EntryFileNotFound(

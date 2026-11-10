@@ -25,11 +25,5 @@ pub fn run(exe: String, args: List(String)) -> Promise(Result(Nil, String)) {
   exec(exe, args)
 }
 
-@target(javascript)
 @external(javascript, "./ffi_esbuild.mjs", "exec")
 fn exec(command: String, args: List(String)) -> Promise(Result(Nil, String))
-
-@target(erlang)
-fn exec(_command: String, _args: List(String)) -> Promise(Result(Nil, String)) {
-  promise.resolve(Error("Giolt only supports the `javascript` target."))
-}

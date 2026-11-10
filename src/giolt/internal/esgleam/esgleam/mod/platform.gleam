@@ -20,11 +20,9 @@ pub type Arch {
   Ppc64
 }
 
-@external(erlang, "ffi_esgleam", "get_os")
 @external(javascript, "../../ffi_esgleam.mjs", "get_os")
 pub fn get_os() -> Result(OsName, Nil)
 
-@external(erlang, "ffi_esgleam", "get_arch")
 @external(javascript, "../../ffi_esgleam.mjs", "get_arch")
 pub fn get_arch() -> Result(Arch, Nil)
 

@@ -1,4 +1,5 @@
 import filepath
+import giolt/internal/config
 import giolt/internal/esbuild
 import giolt/internal/esbuild_bin
 import giolt/internal/io
@@ -38,13 +39,11 @@ pub type Error {
   EntryInsideOutdir(entry: String, outdir: String)
 }
 
-pub const default_outdir = "./dist"
-
 pub fn new() -> Config(NoEntry) {
   Config(
     entry: "",
     static_dir: None,
-    outdir: default_outdir,
+    outdir: config.default_outdir,
     additional_args: [],
   )
 }

@@ -256,11 +256,5 @@ fn locked_versions(
   }
 }
 
-@target(javascript)
 @external(javascript, "./ffi_afterglow.mjs", "make_executable")
 fn chmod_executable(path: String) -> Promise(Result(Nil, String))
-
-@target(erlang)
-fn chmod_executable(_path: String) -> Promise(Result(Nil, String)) {
-  promise.resolve(Error("Giolt only supports the `javascript` target."))
-}
