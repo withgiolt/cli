@@ -1,5 +1,6 @@
 import gleam/list
 import gleam/result
+import gleam/set.{type Set}
 import gleam/string
 import tom
 
@@ -81,24 +82,81 @@ target = \"erlang\"
 // The Hex packages a manifest.toml locks, with their versions. Git and path
 // packages are left to the user's project to declare.
 pub fn locked_versions(
-  manifest: String,
+  manifest manifest: String,
+  dependencies dependencies: List(String),
 ) -> Result(List(#(String, String)), Nil) {
-  use toml <- result.try(tom.parse(manifest) |> result.replace_error(Nil))
+  use toml <- result.try(
+    tom.parse(string.replace(manifest, "\r\n", "\n"))
+    |> result.replace_error(Nil),
+  )
   use packages <- result.try(
     tom.get_array(toml, ["packages"]) |> result.replace_error(Nil),
   )
-  use tables <- result.try(
-    list.try_map(packages, tom.as_table) |> result.replace_error(Nil),
-  )
+  use packages <- result.try(list.try_map(packages, locked_package))
 
-  tables
-  |> list.filter(fn(fields) { tom.get_string(fields, ["source"]) == Ok("hex") })
-  |> list.try_map(fn(fields) {
-    case tom.get_string(fields, ["name"]), tom.get_string(fields, ["version"]) {
-      Ok(name), Ok(version) -> Ok(#(name, version))
-      _, _ -> Error(Nil)
-    }
+  // The manifest also locks dev dependencies, which the build package must
+  // not pull in, so only what the user's dependencies reach is pinned.
+  let reached = reach(packages, dependencies, set.new())
+  packages
+  |> list.filter(fn(package) {
+    package.hex && set.contains(reached, package.name)
   })
+  |> list.map(fn(package) { #(package.name, package.version) })
+  |> Ok
+}
+
+type LockedPackage {
+  LockedPackage(
+    name: String,
+    version: String,
+    hex: Bool,
+    requirements: List(String),
+  )
+}
+
+fn locked_package(package: tom.Toml) -> Result(LockedPackage, Nil) {
+  let fields = tom.as_table(package)
+  let field = fn(key) {
+    result.try(fields, tom.get_string(_, [key])) |> result.replace_error(Nil)
+  }
+  use name <- result.try(field("name"))
+  use version <- result.try(field("version"))
+  use requirements <- result.try(
+    result.try(fields, tom.get_array(_, ["requirements"]))
+    |> result.try(list.try_map(_, tom.as_string))
+    |> result.replace_error(Nil),
+  )
+  Ok(LockedPackage(
+    name:,
+    version:,
+    hex: field("source") == Ok("hex"),
+    requirements:,
+  ))
+}
+
+fn reach(
+  packages: List(LockedPackage),
+  pending: List(String),
+  reached: Set(String),
+) -> Set(String) {
+  case pending {
+    [] -> reached
+    [name, ..rest] ->
+      case set.contains(reached, name) {
+        True -> reach(packages, rest, reached)
+        False -> {
+          let requirements =
+            list.find(packages, fn(package) { package.name == name })
+            |> result.map(fn(package) { package.requirements })
+            |> result.unwrap([])
+          reach(
+            packages,
+            list.append(requirements, rest),
+            set.insert(reached, name),
+          )
+        }
+      }
+  }
 }
 
 pub fn start_source(entry: String) -> String {

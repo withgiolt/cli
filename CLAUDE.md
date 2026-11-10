@@ -75,7 +75,7 @@ from a pure function in `src/giolt/internal/`, each with a matching
 | Module | Owns |
 | --- | --- |
 | `cli.gleam` | The command tree (clip) and its flags; `parse` returns `Run`, `Usage` or `Invalid` |
-| `config.gleam` | Reading the target and every `[tools.giolt]` key, with defaults and typed errors |
+| `config.gleam` | Reading the target, the `[dependencies]` names and every `[tools.giolt]` key, with defaults and typed errors |
 | `signature.gleam` | Checking `handle/1` against the JSON from `gleam export package-interface` |
 | `afterglow.gleam` | The generated afterglow build package (`gleam.toml` pinned to the user's `manifest.toml`, `start/0`), the build steps, the compiler name per platform, the compiler, wasm-merge and wasm-opt arguments, and how the compiler's warnings are reported |
 | `afterglow_bin.gleam` + `ffi_afterglow.mjs` | Running that build: check the platform and tools, generate, `gleam build --target erlang`, compile to Wasm, install Binaryen, link, optimise, copy `app.wasm` and `index.js` |
@@ -121,8 +121,9 @@ only reads, writes and calls it.
   runtime as the CLI. The user's machine needs Erlang/OTP and rebar3, and
   `giolt build` says so before doing any work. Gleam resolves a path
   dependency's own dependencies afresh and ignores a copied `manifest.toml`, so
-  the generated `gleam.toml` pins every Hex package the user's manifest locks
-  with `==`.
+  the generated `gleam.toml` pins with `==` each Hex package the user's
+  manifest locks that their `[dependencies]` reach. Dev dependencies stay out,
+  because a direct dependency of the build package is compiled on every build.
 - **`bundle.run` never runs `gleam build`; `commands.gleam` does.** `bundle`
   takes a plain path to a JS file and only reads it. Don't make it shell out.
 - **`dev` rebuilds in-process.** Every build step is a subprocess (gleam,

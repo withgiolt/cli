@@ -67,7 +67,7 @@ pub fn check_tooling() -> Result(Nil, String) {
 }
 
 fn generate_package(config: Config) -> Result(Nil, String) {
-  use locked <- result.try(locked_versions())
+  use locked <- result.try(locked_versions(config.dependencies))
   let files = [
     #(
       "gleam.toml",
@@ -226,7 +226,9 @@ fn describe_file_error(error: simplifile.FileError) -> String {
   "Could not write the afterglow build package: " <> string.inspect(error)
 }
 
-fn locked_versions() -> Result(List(#(String, String)), String) {
+fn locked_versions(
+  dependencies: List(String),
+) -> Result(List(#(String, String)), String) {
   case simplifile.read(manifest_path) {
     Error(simplifile.Enoent) -> Ok([])
     Error(error) ->
@@ -237,7 +239,7 @@ fn locked_versions() -> Result(List(#(String, String)), String) {
         <> simplifile.describe_error(error),
       )
     Ok(manifest) ->
-      afterglow.locked_versions(manifest)
+      afterglow.locked_versions(manifest:, dependencies:)
       |> result.replace_error(
         "Could not read the locked versions in " <> manifest_path <> ".",
       )

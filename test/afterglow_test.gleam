@@ -1,5 +1,6 @@
 import giolt/internal/afterglow
 import gleam/list
+import gleam/result
 import gleam/string
 
 pub fn start_calls_handle_through_a_lambda_test() {
@@ -55,28 +56,62 @@ const manifest =
   "# Do not manually edit this file, it is managed by Gleam.
 
 packages = [
+  { name = \"forked\", version = \"0.2.0\", build_tools = [\"gleam\"], requirements = [], source = \"git\", repo = \"https://example.com/forked\", commit = \"abc\" },
   { name = \"gleam_regexp\", version = \"1.0.0\", build_tools = [\"gleam\"], requirements = [\"gleam_stdlib\"], otp_app = \"gleam_regexp\", source = \"hex\", outer_checksum = \"A3655FDD\" },
   { name = \"gleam_stdlib\", version = \"1.0.5\", build_tools = [\"gleam\"], requirements = [], otp_app = \"gleam_stdlib\", source = \"hex\", outer_checksum = \"CEE5B6C0\" },
-  { name = \"shared\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = [], source = \"local\", path = \"../shared\" },
-  { name = \"forked\", version = \"0.2.0\", build_tools = [\"gleam\"], requirements = [], source = \"git\", repo = \"https://example.com/forked\", commit = \"abc\" },
+  { name = \"gleeunit\", version = \"1.11.0\", build_tools = [\"gleam\"], requirements = [\"gleam_stdlib\"], otp_app = \"gleeunit\", source = \"hex\", outer_checksum = \"EC31ABA7\" },
+  { name = \"shared\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = [\"tom\"], source = \"local\", path = \"../shared\" },
+  { name = \"tom\", version = \"2.1.0\", build_tools = [\"gleam\"], requirements = [\"gleam_stdlib\"], otp_app = \"tom\", source = \"hex\", outer_checksum = \"1A2B3C4D\" },
 ]
 
 [requirements]
+forked = { git = \"https://example.com/forked\", ref = \"abc\" }
 gleam_regexp = { version = \">= 1.0.0 and < 2.0.0\" }
+gleeunit = { version = \">= 1.0.0 and < 2.0.0\" }
+shared = { path = \"../shared\" }
 "
 
 pub fn the_manifest_locks_only_hex_packages_test() {
-  assert afterglow.locked_versions(manifest)
+  assert afterglow.locked_versions(manifest:, dependencies: ["gleam_regexp"])
+    == Ok([#("gleam_regexp", "1.0.0"), #("gleam_stdlib", "1.0.5")])
+}
+
+pub fn dev_dependencies_are_not_pinned_test() {
+  let assert Ok(locked) =
+    afterglow.locked_versions(manifest:, dependencies: [
+      "forked", "gleam_regexp",
+    ])
+
+  assert list.key_find(locked, "gleeunit") |> result.is_error
+}
+
+pub fn hex_packages_behind_a_path_dependency_are_pinned_test() {
+  assert afterglow.locked_versions(manifest:, dependencies: ["shared"])
+    == Ok([#("gleam_stdlib", "1.0.5"), #("tom", "2.1.0")])
+}
+
+pub fn a_manifest_written_with_crlf_still_reads_test() {
+  assert afterglow.locked_versions(
+      manifest: string.replace(manifest, "\n", "\r\n"),
+      dependencies: ["gleam_regexp"],
+    )
     == Ok([#("gleam_regexp", "1.0.0"), #("gleam_stdlib", "1.0.5")])
 }
 
 pub fn a_manifest_with_no_packages_locks_nothing_test() {
-  assert afterglow.locked_versions("packages = []\n") == Ok([])
+  assert afterglow.locked_versions(manifest: "packages = []\n", dependencies: [
+      "wisp",
+    ])
+    == Ok([])
 }
 
 pub fn a_broken_manifest_is_an_error_test() {
-  assert afterglow.locked_versions("packages = [") == Error(Nil)
-  assert afterglow.locked_versions("packages = [{ source = \"hex\" }]\n")
+  assert afterglow.locked_versions(manifest: "packages = [", dependencies: [])
+    == Error(Nil)
+  assert afterglow.locked_versions(
+      manifest: "packages = [{ source = \"hex\" }]\n",
+      dependencies: [],
+    )
     == Error(Nil)
 }
 

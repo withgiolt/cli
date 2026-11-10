@@ -1,3 +1,4 @@
+import gleam/dict
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -27,6 +28,7 @@ pub type Config {
     prebuild: Option(String),
     artifact: Option(String),
     project: Option(Int),
+    dependencies: List(String),
   )
 }
 
@@ -61,6 +63,7 @@ pub fn default(package: String, target: Target) -> Config {
     prebuild: None,
     artifact: None,
     project: None,
+    dependencies: [],
   )
 }
 
@@ -106,6 +109,7 @@ pub fn parse_with(
     tom.get_string(root, ["name"]) |> result.replace_error(MissingName),
   )
   use target <- result.try(read_target(root))
+  use dependencies <- result.try(read_dependencies(root))
   let defaults = default(package, target)
 
   use entry <- result.try(read_entry(toml, defaults.entry))
@@ -187,7 +191,17 @@ pub fn parse_with(
     prebuild:,
     artifact:,
     project:,
+    dependencies:,
   ))
+}
+
+fn read_dependencies(root) -> Result(List(String), Error) {
+  case tom.get_table(root, ["dependencies"]) {
+    Ok(table) -> Ok(list.sort(dict.keys(table), string.compare))
+    Error(tom.NotFound(_)) -> Ok([])
+    Error(tom.WrongType(..)) ->
+      Error(InvalidValue(key: "dependencies", expected: "a table"))
+  }
 }
 
 fn default_watch(source: List(String), assets: Option(String)) -> List(String) {

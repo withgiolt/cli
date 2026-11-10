@@ -111,22 +111,25 @@ project = 42
 
 pub fn every_key_is_read_from_tools_giolt_test() {
   assert config.parse(every_key)
-    == Ok(config.Config(
-      package: "my_app",
-      target: Javascript,
-      entry: "my_app/server",
-      assets: Some("public"),
-      outdir: "./out",
-      esbuild_args: ["--minify=false", "--external:foo"],
-      spa: True,
-      watch: ["src", "content"],
-      port: 8080,
-      live_reload: False,
-      api_url: "http://localhost:4000",
-      prebuild: Some("gleam run -m docs/build"),
-      artifact: Some("./site"),
-      project: Some(42),
-    ))
+    == Ok(
+      config.Config(
+        package: "my_app",
+        target: Javascript,
+        entry: "my_app/server",
+        assets: Some("public"),
+        outdir: "./out",
+        esbuild_args: ["--minify=false", "--external:foo"],
+        spa: True,
+        watch: ["src", "content"],
+        port: 8080,
+        live_reload: False,
+        api_url: "http://localhost:4000",
+        prebuild: Some("gleam run -m docs/build"),
+        artifact: Some("./site"),
+        project: Some(42),
+        dependencies: [],
+      ),
+    )
 }
 
 pub fn defaults_apply_when_no_keys_are_set_test() {
@@ -303,4 +306,18 @@ pub fn crlf_files_keep_the_keys_after_a_comment_test() {
 
   assert from_settings.port == 3001
   assert from_gleam_toml.port == 3002
+}
+
+pub fn dependency_names_exclude_dev_dependencies_test() {
+  let assert Ok(config) =
+    config.parse(
+      "name = \"my_app\"\n\n[dependencies]\nwisp = \">= 2.0.0\"\ngleam_stdlib = \">= 1.0.0\"\n\n[dev_dependencies]\ngleeunit = \">= 1.0.0\"\n",
+    )
+
+  assert config.dependencies == ["gleam_stdlib", "wisp"]
+}
+
+pub fn dependencies_that_are_not_a_table_are_rejected_test() {
+  assert config.parse("name = \"my_app\"\ndependencies = 3\n")
+    == Error(config.InvalidValue(key: "dependencies", expected: "a table"))
 }
