@@ -1,5 +1,7 @@
 import envie
 import filepath
+import giolt/internal/afterglow
+import giolt/internal/afterglow_bin
 import giolt/internal/api
 import giolt/internal/bundle
 import giolt/internal/config.{
@@ -8,7 +10,6 @@ import giolt/internal/config.{
 import giolt/internal/confirm
 import giolt/internal/credentials.{type Credential, type Session, Credential}
 import giolt/internal/deploy
-import giolt/internal/glowvm_bin
 import giolt/internal/io
 import giolt/internal/link
 import giolt/internal/process
@@ -329,7 +330,7 @@ fn read_config(
 fn run_build(config: Config) -> Promise(Result(Nil, String)) {
   let tooling = case config.target {
     Javascript -> Ok(Nil)
-    Erlang -> glowvm_bin.check_tooling()
+    Erlang -> afterglow_bin.check_tooling()
   }
 
   case tooling {
@@ -344,9 +345,9 @@ fn run_build(config: Config) -> Promise(Result(Nil, String)) {
           bundle_javascript(config)
         }
         Erlang -> {
-          io.println_progress(1, glowvm_bin.steps, "Checked handle")
+          afterglow_bin.progress(afterglow.CheckedHandle)
           warn_unused_assets(config)
-          glowvm_bin.build(config, config.outdir)
+          afterglow_bin.build(config, config.outdir)
         }
       }
     }
@@ -416,7 +417,7 @@ fn warn_unused_assets(config: Config) -> Nil {
   case config.assets {
     Some(_) ->
       io.println_warning(
-        "`assets` is ignored for the Erlang target: GlowVM apps have no static directory yet.",
+        "`assets` is ignored for the Erlang target: afterglow apps have no static directory yet.",
       )
     None -> Nil
   }

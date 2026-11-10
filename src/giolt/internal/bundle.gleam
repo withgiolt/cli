@@ -188,7 +188,8 @@ fn run_esbuild(
 ) -> Promise(Result(Nil, Error)) {
   io.println_info("Bundling...")
 
-  case esbuild_bin.ensure_installed() {
+  use installed <- promise.await(esbuild_bin.ensure_installed())
+  case installed {
     Error(reason) -> promise.resolve(Error(EsbuildFailed(reason)))
     Ok(exe) -> {
       let plan =

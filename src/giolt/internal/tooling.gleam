@@ -10,10 +10,13 @@ pub fn required() -> List(Tool) {
   [Erlang, Rebar3]
 }
 
-pub fn probe(tool: Tool) -> #(String, List(String)) {
-  case tool {
-    Erlang -> #("erl", ["-noshell", "-eval", "halt(0)."])
-    Rebar3 -> #("rebar3", ["version"])
+// rebar3 installs as rebar3.cmd on Windows, and Node only starts .cmd files
+// through cmd.exe.
+pub fn probe(tool: Tool, windows windows: Bool) -> #(String, List(String)) {
+  case tool, windows {
+    Erlang, _ -> #("erl", ["-noshell", "-eval", "halt(0)."])
+    Rebar3, False -> #("rebar3", ["version"])
+    Rebar3, True -> #("cmd.exe", ["/d", "/s", "/c", "rebar3", "version"])
   }
 }
 

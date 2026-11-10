@@ -25,6 +25,41 @@ pub fn run_in(
 }
 
 @target(javascript)
+@external(javascript, "./ffi_process.mjs", "output")
+pub fn output(
+  directory: String,
+  command: String,
+  args: List(String),
+) -> Promise(Result(#(String, String), String))
+
+@target(erlang)
+pub fn output(
+  _directory: String,
+  _command: String,
+  _args: List(String),
+) -> Promise(Result(#(String, String), String)) {
+  promise.resolve(Error("Giolt only supports the `javascript` target."))
+}
+
+@target(javascript)
+@external(javascript, "./ffi_process.mjs", "runtime_path")
+pub fn runtime_path() -> String
+
+@target(erlang)
+pub fn runtime_path() -> String {
+  ""
+}
+
+@target(javascript)
+@external(javascript, "./ffi_process.mjs", "platform")
+pub fn platform() -> String
+
+@target(erlang)
+pub fn platform() -> String {
+  ""
+}
+
+@target(javascript)
 @external(javascript, "./ffi_process.mjs", "shell")
 pub fn shell(command: String) -> Promise(Result(Nil, String))
 

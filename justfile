@@ -12,7 +12,7 @@ build-npm:
     rm -rf dist
     mkdir -p dist/esgleam
     npx --yes esbuild@0.28.2 npm/bin.mjs --bundle --platform=node --format=esm --outfile=dist/giolt.mjs
-    cp src/giolt/internal/esgleam/streaming_tar.mjs src/giolt/internal/esgleam/LICENSE src/giolt/internal/esgleam/NOTICE dist/esgleam/
+    cp src/giolt/internal/esgleam/LICENSE src/giolt/internal/esgleam/NOTICE dist/esgleam/
     cp npm/package.json README.md LICENSE dist/
     cd dist && npm version "$(grep '^version' ../gleam.toml | cut -d'"' -f2)" --no-git-tag-version --allow-same-version
 
