@@ -18,8 +18,16 @@ pub fn only_the_missing_tools_are_named_test() {
 }
 
 pub fn each_tool_has_a_probe_that_exits_without_a_shell_test() {
-  assert tooling.probe(Erlang) == #("erl", ["-noshell", "-eval", "halt(0)."])
-  assert tooling.probe(Rebar3) == #("rebar3", ["version"])
+  assert tooling.probe(Erlang, windows: False)
+    == #("erl", ["-noshell", "-eval", "halt(0)."])
+  assert tooling.probe(Rebar3, windows: False) == #("rebar3", ["version"])
+}
+
+pub fn windows_probes_rebar3_through_cmd_test() {
+  assert tooling.probe(Rebar3, windows: True)
+    == #("cmd.exe", ["/d", "/s", "/c", "rebar3", "version"])
+  assert tooling.probe(Erlang, windows: True)
+    == #("erl", ["-noshell", "-eval", "halt(0)."])
 }
 
 pub fn the_erlang_target_needs_erlang_and_rebar3_test() {

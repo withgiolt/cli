@@ -54,7 +54,13 @@ pub fn flags_additional_args_default_empty_test() {
 }
 
 pub fn exe_path_test() {
-  assert esbuild.exe_path("esbuild") == "./build/dev/bin/package/bin/esbuild"
+  assert esbuild.exe_path("esbuild")
+    == "./build/dev/bin/esbuild-" <> esbuild.version <> "/bin/esbuild"
+}
+
+pub fn the_windows_binary_sits_at_the_package_root_test() {
+  assert esbuild.package_file("esbuild.exe") == "esbuild.exe"
+  assert esbuild.package_file("esbuild") == "bin/esbuild"
 }
 
 pub fn tarball_url_test() {

@@ -1,22 +1,22 @@
 import giolt/internal/esbuild
 import giolt/internal/esgleam/esgleam/mod/platform
 import giolt/internal/io
+import giolt/internal/npm
 import gleam/javascript/promise.{type Promise}
-import simplifile
+import gleam/result
 
-pub fn ensure_installed() -> Result(String, String) {
-  let exe = esbuild.exe_path(platform.get_exe_name())
+pub fn ensure_installed() -> Promise(Result(String, String)) {
+  let exe_name = platform.get_exe_name()
+  let directory = esbuild.install_dir()
+  let files = [esbuild.package_file(exe_name)]
 
-  case simplifile.is_file(exe) {
-    Ok(True) -> Ok(exe)
-    Ok(False) | Error(_) -> {
+  case npm.installed(directory, files) {
+    True -> promise.resolve(Ok(esbuild.exe_path(exe_name)))
+    False -> {
       io.println_info("Downloading esbuild " <> esbuild.version <> "...")
-
       let url = esbuild.tarball_url(platform.get_package_name())
-      case install(url, esbuild.install_dir, platform.get_exe_name()) {
-        Ok(_) -> Ok(exe)
-        Error(reason) -> Error(reason)
-      }
+      use installed <- promise.map(npm.install(url, directory, files))
+      result.replace(installed, esbuild.exe_path(exe_name))
     }
   }
 }
@@ -32,21 +32,4 @@ fn exec(command: String, args: List(String)) -> Promise(Result(Nil, String))
 @target(erlang)
 fn exec(_command: String, _args: List(String)) -> Promise(Result(Nil, String)) {
   promise.resolve(Error("Giolt only supports the `javascript` target."))
-}
-
-@target(javascript)
-@external(javascript, "./ffi_esbuild.mjs", "install")
-fn install(
-  url: String,
-  directory: String,
-  exe_name: String,
-) -> Result(Nil, String)
-
-@target(erlang)
-fn install(
-  _url: String,
-  _directory: String,
-  _exe_name: String,
-) -> Result(Nil, String) {
-  Error("Giolt only supports the `javascript` target.")
 }

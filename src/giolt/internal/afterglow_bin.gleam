@@ -2,6 +2,7 @@ import filepath
 import giolt/internal/afterglow
 import giolt/internal/config.{type Config}
 import giolt/internal/io
+import giolt/internal/npm
 import giolt/internal/process
 import giolt/internal/tooling
 import gleam/javascript/promise.{type Promise}
@@ -10,40 +11,52 @@ import gleam/result
 import gleam/string
 import simplifile
 
-pub const steps = 5
-
 const app_wasm = "build/app.wasm"
 
 const merged_wasm = "build/merged.wasm"
 
 const optimised_wasm = "build/optimised.wasm"
 
+const manifest_path = "./manifest.toml"
+
 pub fn build(config: Config, outdir: String) -> Promise(Result(Nil, String)) {
   case generate_package(config) {
     Error(message) -> promise.resolve(Error(message))
     Ok(Nil) -> {
       use _ <- promise.try_await(compile_to_beam())
-      io.println_progress(2, steps, "Compiled to BEAM")
+      progress(afterglow.CompiledToBeam)
 
       use _ <- promise.try_await(compile_to_wasm())
-      io.println_progress(3, steps, "Compiled to WebAssembly")
+      progress(afterglow.CompiledToWasm)
 
       use _ <- promise.try_await(link_and_optimise())
-      io.println_progress(4, steps, "Linked and optimised")
+      progress(afterglow.LinkedAndOptimised)
 
       promise.resolve({
         use _ <- result.try(copy_output(outdir))
-        io.println_progress(5, steps, "Copied the Worker")
+        progress(afterglow.CopiedWorker)
         Ok(Nil)
       })
     }
   }
 }
 
+pub fn progress(step: afterglow.Step) -> Nil {
+  io.println_progress(
+    afterglow.step_number(step),
+    list.length(afterglow.steps),
+    afterglow.step_label(step),
+  )
+}
+
 pub fn check_tooling() -> Result(Nil, String) {
+  let platform = process.platform()
+  use _ <- result.try(afterglow.compiler_name(platform))
+
+  let windows = string.starts_with(platform, "win32-")
   let missing =
     list.filter(tooling.required(), fn(tool) {
-      let #(command, args) = tooling.probe(tool)
+      let #(command, args) = tooling.probe(tool, windows:)
       !process.available(command, args)
     })
 
@@ -54,10 +67,15 @@ pub fn check_tooling() -> Result(Nil, String) {
 }
 
 fn generate_package(config: Config) -> Result(Nil, String) {
+  use locked <- result.try(locked_versions())
   let files = [
     #(
       "gleam.toml",
-      afterglow.gleam_toml(package: config.package, project_path: "../../.."),
+      afterglow.gleam_toml(
+        package: config.package,
+        project_path: "../../..",
+        locked:,
+      ),
     ),
     #(
       "src/" <> afterglow.start_module <> ".gleam",
@@ -101,10 +119,15 @@ fn compile_to_wasm() -> Promise(Result(Nil, String)) {
           out: filepath.join(afterglow.build_dir, app_wasm),
         )
       use compiled <- promise.map(process.output(".", compiler, args))
-      use #(_, warnings) <- result.map(compiled)
-      case afterglow.missing_functions(warnings) {
+      use #(_, stderr) <- result.map(compiled)
+      let afterglow.Warnings(missing:, other:) = afterglow.warnings(stderr)
+      case missing {
         [] -> Nil
-        missing -> io.println_warning(afterglow.describe_missing(missing))
+        _ -> io.println_warning(afterglow.describe_missing(missing))
+      }
+      case other {
+        [] -> Nil
+        _ -> io.println_warning(afterglow.describe_other(other))
       }
     }
   }
@@ -130,8 +153,6 @@ fn make_executable(path: String) -> Promise(Result(Nil, String)) {
   }
 }
 
-/// The ebin directory of every package the generated build package compiled,
-/// the user's project and its dependencies included.
 fn project_ebin_dirs() -> Result(List(String), String) {
   let root = filepath.join(afterglow.build_dir, "build/dev/erlang")
   simplifile.read_directory(root)
@@ -161,17 +182,14 @@ fn link_and_optimise() -> Promise(Result(Nil, String)) {
 
 fn ensure_binaryen() -> Promise(Result(Nil, String)) {
   let dir = afterglow.binaryen_dir()
-  case simplifile.is_file(filepath.join(dir, "bin/wasm-opt")) {
-    Ok(True) -> promise.resolve(Ok(Nil))
-    _ -> {
+  let files = afterglow.binaryen_files()
+  case npm.installed(dir, files) {
+    True -> promise.resolve(Ok(Nil))
+    False -> {
       io.println_info(
         "Downloading Binaryen " <> afterglow.binaryen_version <> "...",
       )
-      install_from_npm(
-        afterglow.binaryen_tarball_url(),
-        dir,
-        afterglow.binaryen_files(),
-      )
+      npm.install(afterglow.binaryen_tarball_url(), dir, files)
     }
   }
 }
@@ -208,21 +226,22 @@ fn describe_file_error(error: simplifile.FileError) -> String {
   "Could not write the afterglow build package: " <> string.inspect(error)
 }
 
-@target(javascript)
-@external(javascript, "./ffi_afterglow.mjs", "install_from_npm")
-fn install_from_npm(
-  url: String,
-  directory: String,
-  files: List(String),
-) -> Promise(Result(Nil, String))
-
-@target(erlang)
-fn install_from_npm(
-  _url: String,
-  _directory: String,
-  _files: List(String),
-) -> Promise(Result(Nil, String)) {
-  promise.resolve(Error("Giolt only supports the `javascript` target."))
+fn locked_versions() -> Result(List(#(String, String)), String) {
+  case simplifile.read(manifest_path) {
+    Error(simplifile.Enoent) -> Ok([])
+    Error(error) ->
+      Error(
+        "Could not read "
+        <> manifest_path
+        <> ": "
+        <> simplifile.describe_error(error),
+      )
+    Ok(manifest) ->
+      afterglow.locked_versions(manifest)
+      |> result.replace_error(
+        "Could not read the locked versions in " <> manifest_path <> ".",
+      )
+  }
 }
 
 @target(javascript)

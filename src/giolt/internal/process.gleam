@@ -25,8 +25,6 @@ pub fn run_in(
 }
 
 @target(javascript)
-/// Runs a command and returns its stdout and stderr. On a non-zero exit the error
-/// includes stderr.
 @external(javascript, "./ffi_process.mjs", "output")
 pub fn output(
   directory: String,
@@ -44,7 +42,6 @@ pub fn output(
 }
 
 @target(javascript)
-/// The Node or Bun executable running the CLI, for tools that ship as JavaScript.
 @external(javascript, "./ffi_process.mjs", "runtime_path")
 pub fn runtime_path() -> String
 
@@ -54,7 +51,6 @@ pub fn runtime_path() -> String {
 }
 
 @target(javascript)
-/// Node's `process.platform-process.arch`, such as `linux-x64`.
 @external(javascript, "./ffi_process.mjs", "platform")
 pub fn platform() -> String
 

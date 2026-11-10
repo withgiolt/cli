@@ -1,5 +1,7 @@
 import gleam/list
+import gleam/result
 import gleam/string
+import tom
 
 pub const package_name = "giolt_afterglow_build"
 
@@ -9,30 +11,94 @@ pub const start_module = "giolt_afterglow_start"
 
 const runtime_range = ">= 0.1.0 and < 1.0.0"
 
-/// Where Gleam unpacks the afterglow Hex package's compilers, runtime and Worker
-/// entry inside the generated build package.
 pub fn priv_dir() -> String {
   build_dir <> "/build/packages/afterglow/priv"
 }
 
-/// The files `giolt build` writes to `outdir`.
-pub fn output_files() -> List(String) {
-  ["app.wasm", "index.js"]
+pub type Step {
+  CheckedHandle
+  CompiledToBeam
+  CompiledToWasm
+  LinkedAndOptimised
+  CopiedWorker
 }
 
+pub const steps = [
+  CheckedHandle,
+  CompiledToBeam,
+  CompiledToWasm,
+  LinkedAndOptimised,
+  CopiedWorker,
+]
+
+pub fn step_number(step: Step) -> Int {
+  case step {
+    CheckedHandle -> 1
+    CompiledToBeam -> 2
+    CompiledToWasm -> 3
+    LinkedAndOptimised -> 4
+    CopiedWorker -> 5
+  }
+}
+
+pub fn step_label(step: Step) -> String {
+  case step {
+    CheckedHandle -> "Checked handle"
+    CompiledToBeam -> "Compiled to BEAM"
+    CompiledToWasm -> "Compiled to WebAssembly"
+    LinkedAndOptimised -> "Linked and optimised"
+    CopiedWorker -> "Copied the Worker"
+  }
+}
+
+// A path dependency's own dependencies are resolved afresh, whatever its
+// manifest.toml says, so the build package pins every Hex package the user's
+// manifest locks. Without the pins the Wasm build could run other versions
+// than the user's tests did.
 pub fn gleam_toml(
   package package: String,
   project_path project_path: String,
+  locked locked: List(#(String, String)),
 ) -> String {
+  let pinned = list.map(locked, fn(pair) { #(pair.0, "== " <> pair.1) })
+  let defaults =
+    [#("gleam_stdlib", ">= 1.0.0 and < 2.0.0"), #("afterglow", runtime_range)]
+    |> list.filter(fn(pair) { list.key_find(locked, pair.0) |> result.is_error })
+  let dependencies =
+    list.map(list.append(defaults, pinned), fn(pair) {
+      pair.0 <> " = \"" <> pair.1 <> "\"\n"
+    })
+
   "name = \"" <> package_name <> "\"
 version = \"0.0.0\"
 target = \"erlang\"
 
 [dependencies]
-gleam_stdlib = \">= 1.0.0 and < 2.0.0\"
-afterglow = \"" <> runtime_range <> "\"
-" <> package <> " = { path = \"" <> project_path <> "\" }
+" <> string.concat(dependencies) <> package <> " = { path = \"" <> project_path <> "\" }
 "
+}
+
+// The Hex packages a manifest.toml locks, with their versions. Git and path
+// packages are left to the user's project to declare.
+pub fn locked_versions(
+  manifest: String,
+) -> Result(List(#(String, String)), Nil) {
+  use toml <- result.try(tom.parse(manifest) |> result.replace_error(Nil))
+  use packages <- result.try(
+    tom.get_array(toml, ["packages"]) |> result.replace_error(Nil),
+  )
+  use tables <- result.try(
+    list.try_map(packages, tom.as_table) |> result.replace_error(Nil),
+  )
+
+  tables
+  |> list.filter(fn(fields) { tom.get_string(fields, ["source"]) == Ok("hex") })
+  |> list.try_map(fn(fields) {
+    case tom.get_string(fields, ["name"]), tom.get_string(fields, ["version"]) {
+      Ok(name), Ok(version) -> Ok(#(name, version))
+      _, _ -> Error(Nil)
+    }
+  })
 }
 
 pub fn start_source(entry: String) -> String {
@@ -45,8 +111,6 @@ pub fn start() {
 "
 }
 
-/// The compiler binary in `priv/bin` for a Node `process.platform-process.arch`
-/// pair, such as `linux-x64`.
 pub fn compiler_name(platform: String) -> Result(String, String) {
   case platform {
     "linux-x64" | "linux-arm64" | "darwin-x64" | "darwin-arm64" ->
@@ -61,8 +125,8 @@ pub fn compiler_name(platform: String) -> Result(String, String) {
   }
 }
 
-/// An `erl -eval` expression printing the stdlib, kernel and erts directories of
-/// the OTP that `erl` runs, one per line. afterglow compiles those modules too.
+// afterglow compiles the OTP modules the app calls too, so it needs their
+// directories from the OTP that `erl` runs.
 pub const otp_libs_eval =
   "io:format(\"~s~n~s~n~s~n\", [code:lib_dir(stdlib), code:lib_dir(kernel), code:lib_dir(erts)]), halt()."
 
@@ -92,16 +156,16 @@ pub fn compile_args(
   ]
 }
 
-/// The Wasm features the runtime and the compiled app use; workerd supports all of
-/// them. wasm-merge and wasm-opt both need the list.
+// The Wasm features the runtime and the compiled app use; workerd supports all
+// of them. wasm-merge and wasm-opt both need the list.
 const wasm_features = [
   "--enable-tail-call", "--enable-bulk-memory",
   "--enable-nontrapping-float-to-int", "--enable-sign-ext",
   "--enable-mutable-globals", "--enable-reference-types", "--enable-multivalue",
 ]
 
-/// Links the compiled app with the runtime. The compiler imports the runtime's
-/// functions from a module named `afterglow_runtime`.
+// The compiler imports the runtime's functions from a module named
+// `afterglow_runtime`.
 pub fn merge_args(
   runtime runtime: String,
   app app: String,
@@ -123,7 +187,7 @@ pub fn optimise_args(input input: String, out out: String) -> List(String) {
 
 pub const binaryen_version = "132.0.0"
 
-/// One directory per version, so changing binaryen_version installs it afresh.
+// One directory per version, so changing binaryen_version installs it afresh.
 pub fn binaryen_dir() -> String {
   "./build/dev/bin/binaryen-" <> binaryen_version
 }
@@ -134,37 +198,69 @@ pub fn binaryen_tarball_url() -> String {
   <> ".tgz"
 }
 
-/// What the build needs from the binaryen npm package. Its tools are JavaScript
-/// with WebAssembly inside, run with the same runtime as the CLI; bin/package.json
-/// marks them CommonJS.
+// The tools are JavaScript with WebAssembly inside, run with the same runtime
+// as the CLI; bin/package.json marks them CommonJS.
 pub fn binaryen_files() -> List(String) {
   ["bin/wasm-merge", "bin/wasm-opt", "bin/package.json"]
 }
 
+const warning_prefix = "warning: "
+
+// The wording of afterglow 0.1's warnings, in crates/afterglow/src/program.rs.
 const missing_prefixes = [
-  "warning: NIF/BIF not implemented by afterglow_runtime: ",
-  "warning: no module for ", "warning: undefined function: ",
+  "NIF/BIF not implemented by afterglow_runtime: ", "no module for ",
+  "undefined function: ",
 ]
 
-/// The functions the compiler reported it can't provide, from its `-v` output.
-/// Some are never called at run time, so they are a note, not an error.
-pub fn missing_functions(compiler_output: String) -> List(String) {
-  compiler_output
-  |> string.split("\n")
-  |> list.filter_map(fn(line) {
-    let line = string.trim(line)
-    list.find_map(missing_prefixes, fn(prefix) {
-      case string.starts_with(line, prefix) {
-        True -> Ok(string.drop_start(line, string.length(prefix)))
+// Missing functions are a note, not an error: some are never called at run
+// time. Any other warning is passed on as afterglow wrote it, so a warning
+// whose wording changes still reaches the user.
+pub type Warnings {
+  Warnings(missing: List(String), other: List(String))
+}
+
+pub fn warnings(compiler_output: String) -> Warnings {
+  let warnings =
+    compiler_output
+    |> string.split("\n")
+    |> list.map(string.trim)
+    |> list.filter_map(fn(line) {
+      case string.starts_with(line, warning_prefix) {
+        True -> Ok(string.drop_start(line, string.length(warning_prefix)))
         False -> Error(Nil)
       }
     })
+    |> list.unique
+
+  let #(missing, other) =
+    list.fold(warnings, #([], []), fn(acc, warning) {
+      case missing_function(warning) {
+        Ok(name) -> #([name, ..acc.0], acc.1)
+        Error(Nil) -> #(acc.0, [warning, ..acc.1])
+      }
+    })
+
+  Warnings(
+    missing: list.sort(list.unique(missing), string.compare),
+    other: list.reverse(other),
+  )
+}
+
+fn missing_function(warning: String) -> Result(String, Nil) {
+  list.find_map(missing_prefixes, fn(prefix) {
+    case string.starts_with(warning, prefix) {
+      True -> Ok(string.drop_start(warning, string.length(prefix)))
+      False -> Error(Nil)
+    }
   })
-  |> list.unique
-  |> list.sort(string.compare)
 }
 
 pub fn describe_missing(functions: List(String)) -> String {
   "afterglow does not provide these functions. The app still builds, and a request that calls one gets a 500 naming it:\n"
   <> string.join(list.map(functions, fn(name) { "  - " <> name }), "\n")
+}
+
+pub fn describe_other(warnings: List(String)) -> String {
+  "afterglow warned:\n"
+  <> string.join(list.map(warnings, fn(warning) { "  - " <> warning }), "\n")
 }

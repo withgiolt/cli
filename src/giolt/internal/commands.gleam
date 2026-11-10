@@ -1,5 +1,6 @@
 import envie
 import filepath
+import giolt/internal/afterglow
 import giolt/internal/afterglow_bin
 import giolt/internal/api
 import giolt/internal/bundle
@@ -344,7 +345,7 @@ fn run_build(config: Config) -> Promise(Result(Nil, String)) {
           bundle_javascript(config)
         }
         Erlang -> {
-          io.println_progress(1, afterglow_bin.steps, "Checked handle")
+          afterglow_bin.progress(afterglow.CheckedHandle)
           warn_unused_assets(config)
           afterglow_bin.build(config, config.outdir)
         }

@@ -135,6 +135,10 @@ Binaryen from npm into `build/dev/bin`. The output in `outdir` is `app.wasm`
 and `index.js`. afterglow runs on Linux and macOS (x64 and arm64) and Windows
 (x64).
 
+The build uses the versions your `manifest.toml` locks. If afterglow needs a
+newer version of one of them, dependency resolution fails; run `gleam update`
+in your project and build again.
+
 When the app reaches a function afterglow does not provide, such as
 `crypto:mac/4`, `giolt build` lists it and still builds. A request that calls
 one gets a 500 whose body names the function. `dev` and `deploy` do not
