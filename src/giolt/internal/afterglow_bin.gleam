@@ -1,5 +1,6 @@
 import filepath
 import giolt/internal/afterglow
+import giolt/internal/bundle
 import giolt/internal/config.{type Config}
 import giolt/internal/io
 import giolt/internal/npm
@@ -20,7 +21,7 @@ const optimised_wasm = "build/optimised.wasm"
 const manifest_path = "./manifest.toml"
 
 pub fn build(config: Config, outdir: String) -> Promise(Result(Nil, String)) {
-  case generate_package(config) {
+  case check_outdir(outdir) |> result.try(fn(_) { generate_package(config) }) {
     Error(message) -> promise.resolve(Error(message))
     Ok(Nil) -> {
       use _ <- promise.try_await(compile_to_beam())
@@ -38,6 +39,15 @@ pub fn build(config: Config, outdir: String) -> Promise(Result(Nil, String)) {
         Ok(Nil)
       })
     }
+  }
+}
+
+// copy_output deletes outdir, so refuse the same paths the JavaScript bundle
+// does before any work starts.
+fn check_outdir(outdir: String) -> Result(Nil, String) {
+  case bundle.is_unsafe_outdir(outdir) {
+    True -> Error(bundle.describe_error(bundle.UnsafeOutdir(outdir)))
+    False -> Ok(Nil)
   }
 }
 

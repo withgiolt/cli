@@ -91,6 +91,7 @@ from a pure function in `src/giolt/internal/`, each with a matching
 | `confirm.gleam` | Whether `projects delete` proceeds, asks you to type the name, or refuses |
 | `shim.gleam` | The worker entry template esbuild bundles |
 | `server.gleam` + `ffi_server.mjs` | The dev HTTP server (assets, worker hot reload, live-reload SSE) |
+| `static_path.gleam` | Percent-decoding a dev server request path, refusing malformed and NUL-byte paths |
 | `watcher.gleam` + `ffi_watcher.mjs` | Recursive file watching |
 | `process.gleam` + `ffi_process.mjs` | Running subprocesses and shell hooks, capturing a command's output, probing tools, reading a line from stdin, opening a URL, sleeping, exiting |
 | `io.gleam` | Styled output and the glitzer progress line |

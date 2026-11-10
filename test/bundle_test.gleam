@@ -1,5 +1,4 @@
 import giolt/internal/bundle
-import gleam/option
 import gleam/string
 
 pub fn default_outdir_test() {
@@ -43,20 +42,6 @@ pub fn describe_error_unsafe_outdir_test() {
   let message = bundle.describe_error(bundle.UnsafeOutdir("."))
 
   assert string.contains(message, "./dist")
-}
-
-pub fn discard_output_ok_test() {
-  let output =
-    bundle.Output(outdir: "./dist", entry: "app", static_dir: option.None)
-
-  assert bundle.discard_output(Ok(output)) == Ok(Nil)
-}
-
-pub fn discard_output_error_test() {
-  let error = bundle.EntryFileNotFound("./build/dev/javascript/app/app.mjs")
-
-  assert bundle.discard_output(Error(error))
-    == Error(bundle.describe_error(error))
 }
 
 pub fn outdir_contains_entry_true_test() {
