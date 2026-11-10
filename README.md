@@ -29,7 +29,7 @@ Your entry module exports one function named `handle`:
 // JavaScript target
 pub fn handle(req: Request(conversation.RequestBody)) -> Response(conversation.ResponseBody)
 
-// Erlang target (GlowVM)
+// Erlang target (afterglow)
 pub fn handle(req: wisp.Request) -> wisp.Response
 ```
 
@@ -127,10 +127,18 @@ the file leaves out take their defaults):
 
 ## Erlang target
 
-A project with `target = "erlang"` builds for GlowVM. You need Erlang/OTP and
-rebar3 installed, and `giolt build` tells you which one is missing. The output
-in `outdir` is `app.avm` plus the runtime files (`glowvm.wasm`, `index.js`,
-`index.min.js`). `dev` and `deploy` do not support this target yet.
+A project with `target = "erlang"` builds with
+[afterglow](https://github.com/withgiolt/afterglow), which compiles the app's
+BEAM bytecode to WebAssembly. You need Erlang/OTP and rebar3 installed, and
+`giolt build` tells you which one is missing. The first build downloads
+Binaryen from npm into `build/dev/bin`. The output in `outdir` is `app.wasm`
+and `index.js`. afterglow runs on Linux and macOS (x64 and arm64) and Windows
+(x64).
+
+When the app reaches a function afterglow does not provide, such as
+`crypto:mac/4`, `giolt build` lists it and still builds. A request that calls
+one gets a 500 whose body names the function. `dev` and `deploy` do not
+support this target yet.
 
 ## Issues
 

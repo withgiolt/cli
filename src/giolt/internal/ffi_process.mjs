@@ -31,6 +31,40 @@ export function shell(command) {
   return finish(child, (status) => `\`${command}\` exited with status ${status}`);
 }
 
+// Like run, but captures stdout and stderr instead of passing them through.
+// On failure the error carries stderr, so the caller can show what went wrong.
+export function output(directory, command, args) {
+  const child = spawn(command, args.toArray(), {
+    cwd: directory,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => (stdout += chunk));
+  child.stderr.on("data", (chunk) => (stderr += chunk));
+
+  return new Promise((resolve) => {
+    child.on("error", (error) => resolve(new GleamError(error.message)));
+    child.on("close", (status, signal) => {
+      resolve(
+        status === 0
+          ? new Ok([stdout, stderr])
+          : new GleamError(
+              `${command} exited with status ${status ?? `signal ${signal}`}\n${stderr}`.trimEnd(),
+            ),
+      );
+    });
+  });
+}
+
+export function runtime_path() {
+  return process.execPath;
+}
+
+export function platform() {
+  return `${process.platform}-${process.arch}`;
+}
+
 export function forever() {
   return new Promise(() => {});
 }

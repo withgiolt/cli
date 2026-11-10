@@ -77,8 +77,8 @@ from a pure function in `src/giolt/internal/`, each with a matching
 | `cli.gleam` | The command tree (clip) and its flags; `parse` returns `Run`, `Usage` or `Invalid` |
 | `config.gleam` | Reading the target and every `[tools.giolt]` key, with defaults and typed errors |
 | `signature.gleam` | Checking `handle/1` against the JSON from `gleam export package-interface` |
-| `glowvm.gleam` | The generated GlowVM build package: `gleam.toml`, `start/0`, the pack module, the runtime file list |
-| `glowvm_bin.gleam` | Running that build: generate, `gleam run --target erlang -m <pack>`, copy runtime files |
+| `afterglow.gleam` | The generated afterglow build package (`gleam.toml`, `start/0`), the compiler name per platform, the compiler, wasm-merge and wasm-opt arguments, and the missing-function note |
+| `afterglow_bin.gleam` + `ffi_afterglow.mjs` | Running that build: generate, `gleam build --target erlang`, compile to Wasm, install Binaryen from npm, link, optimise, copy `app.wasm` and `index.js` |
 | `tooling.gleam` | Which tools the Erlang target needs (Erlang/OTP, rebar3) and how to say one is missing |
 | `esbuild.gleam` | The esbuild argument list (`Plan -> List(String)`), no process spawned |
 | `esbuild_bin.gleam` | Installing and running the esbuild binary |
@@ -104,18 +104,21 @@ only reads, writes and calls it.
   `fn(Request(conversation.RequestBody)) -> Response(conversation.ResponseBody)`
   or a `Promise` of that. Erlang: `fn(wisp.Request) -> wisp.Response`. There is
   no `handler` fallback, no user-written `start/0` and no direct
-  `glowvm.serve`. `giolt build` checks this from the package interface, and the
+  `afterglow.serve`. `giolt build` checks this from the package interface, and the
   worker shim still checks at request time.
 - **The generated `start/0` calls the handler through a lambda**
-  (`glowvm.serve(fn(req) { user.handle(req) })`). Passing `user.handle` by
-  reference compiles to an external fun literal, which the packer's pruning
-  does not follow, so the user's modules are silently dropped. A test covers
-  this; keep it.
-- **GlowVM builds happen in a generated package**, `build/.giolt/glowvm`, that
-  depends on the user's project by path, so the user does not need `glowvm` as
-  a direct dependency. The Erlang-target helper is run from the JavaScript CLI
-  with `gleam run --target erlang -m <helper>`. The user's machine needs
-  Erlang/OTP and rebar3, and `giolt build` says so before doing any work.
+  (`afterglow.serve(fn(req) { user.handle(req) })`). Passing `user.handle` by
+  reference compiles to an external fun literal; glowvm's packer did not
+  follow those and silently dropped the user's modules. The lambda keeps the
+  call a plain remote call, which afterglow's reachability analysis follows.
+  A test covers this; keep it.
+- **afterglow builds happen in a generated package**, `build/.giolt/afterglow`,
+  that depends on the user's project by path, so the user does not need
+  `afterglow` as a direct dependency. The `afterglow` Hex package carries the
+  native compiler for each platform, the runtime and the Worker entry in
+  `priv/`; Binaryen comes from the `binaryen` npm package and runs on the same
+  runtime as the CLI. The user's machine needs Erlang/OTP and rebar3, and
+  `giolt build` says so before doing any work.
 - **`bundle.run` never runs `gleam build`; `commands.gleam` does.** `bundle`
   takes a plain path to a JS file and only reads it. Don't make it shell out.
 - **`dev` rebuilds in-process.** Every build step is a subprocess (gleam,
@@ -142,12 +145,12 @@ only reads, writes and calls it.
 - **No glob or ignore matching in `dev`.** `watch` takes directories.
 - **Node 20+ and Bun are the supported runtimes** (`gleam run -m giolt` and
   `gleam run --runtime bun -m giolt`); Deno is not supported. Node 20 is the
-  floor because `fs.watch` is only recursive on Linux from there. The GlowVM
-  output ships only `app.avm`, `glowvm.wasm`, `index.js` and `index.min.js`.
+  floor because `fs.watch` is only recursive on Linux from there. The Erlang
+  target's output is only `app.wasm` and `index.js`.
 - **Comments are minimal.** Almost no doc comments in `src/`. Let names and
   types carry the meaning; the few comments that exist are load-bearing.
-- **The runtime package `glowvm` is declared as a Hex range** in the generated
-  `gleam.toml` (`internal/glowvm.gleam`). Deploying the Erlang target is not
+- **The runtime package `afterglow` is declared as a Hex range** in the
+  generated `gleam.toml` (`internal/afterglow.gleam`). Deploying the Erlang target is not
   supported by the platform yet, so `giolt deploy` refuses it.
 
 ## Vendored code
@@ -180,8 +183,7 @@ needs two `../`, and one in `internal/esgleam/` needs three.
 
 `gleam test --target javascript`, or `just test`. Tests in `test/` target the
 pure functions above directly. Real runs need a scratch Gleam project that
-depends on this repo by path as a dev dependency; the GlowVM build also needs
-a local `glowvm` checkout until it is on Hex.
+depends on this repo by path as a dev dependency.
 
 CI (`.github/workflows/test.yml`) runs `gleam format --check src test` and
 `gleam test` on Node 20, Node 22 and Bun on every push and PR, including
