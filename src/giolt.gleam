@@ -1,21 +1,21 @@
 import argv
 import giolt/internal/cli
 import giolt/internal/commands
+import giolt/internal/effect.{type Effect}
 import giolt/internal/io
 import giolt/internal/process
 import gleam/io as stdio
-import gleam/javascript/promise.{type Promise}
 
-pub fn main() -> Promise(Nil) {
+pub fn main() -> Effect(Nil) {
   case cli.parse(argv.load().arguments) {
-    cli.Usage(text) -> promise.resolve(stdio.println(text))
+    cli.Usage(text) -> effect.resolve(stdio.println(text))
     cli.Invalid(text) -> {
       stdio.println_error(text)
       process.exit(2)
-      promise.resolve(Nil)
+      effect.resolve(Nil)
     }
     cli.Run(command) -> {
-      use result <- promise.map(run(command))
+      use result <- effect.map(run(command))
       case result {
         Ok(Nil) -> Nil
         Error(message) -> {
@@ -27,7 +27,7 @@ pub fn main() -> Promise(Nil) {
   }
 }
 
-fn run(command: cli.Command) -> Promise(Result(Nil, String)) {
+fn run(command: cli.Command) -> Effect(Result(Nil, String)) {
   case command {
     cli.Build(config:) -> commands.build(config:)
     cli.Dev(config:) -> commands.dev(config:)
@@ -43,6 +43,6 @@ fn run(command: cli.Command) -> Promise(Result(Nil, String)) {
     cli.RenameProject(from:, to:) -> commands.rename_project(from:, to:)
     cli.DeleteProject(name:, yes:) -> commands.delete_project(name:, yes:)
     cli.ShowUsage(json:) -> commands.usage(json:)
-    cli.Help -> promise.resolve(Ok(stdio.println(cli.usage_text())))
+    cli.Help -> effect.resolve(Ok(stdio.println(cli.usage_text())))
   }
 }

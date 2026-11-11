@@ -86,7 +86,8 @@ from a pure function in `src/giolt/internal/`, each with a matching
 | `bundle.gleam` | Bundling the compiled entry into `outdir` with the worker shim, plus static assets |
 | `deploy.gleam` | Choosing the deploy's project and token (`route`), then posting the deploy to the Giolt API |
 | `link.gleam` | Setting and removing `project` under `[tools.giolt]` as a text edit |
-| `api.gleam` | The `/api/v1` client: requests, response and error decoding, the device-login poll step, what a failed revoke means, which login URLs may be opened |
+| `effect.gleam` + `ffi_effect.mjs` + `giolt_ffi_effect.erl` | `Effect(a)`, the command flow's result: a Promise on JavaScript, the plain value on Erlang |
+| `api.gleam` + `ffi_api.mjs` + `giolt_ffi_api.erl` | The `/api/v1` client (sent with fetch on JavaScript, gleam_httpc on Erlang): requests, response and error decoding, the device-login poll step, what a failed revoke means, which login URLs may be opened |
 | `credentials.gleam` + `ffi_credentials.mjs` | Where `credentials.json` lives, reading and writing it, and choosing between it and `GIOLT_TOKEN` |
 | `confirm.gleam` | Whether `projects delete` proceeds, asks you to type the name, or refuses |
 | `shim.gleam` | The worker entry template esbuild bundles |

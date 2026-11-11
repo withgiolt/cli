@@ -1,12 +1,12 @@
+import giolt/internal/effect.{type Effect}
 import giolt/internal/npm
-import gleam/javascript/promise.{type Promise}
 import gleam/string
 import simplifile
 
 const fixture = "./test/fixtures/npm_package.tgz"
 
 @external(javascript, "./npm_test_ffi.mjs", "serve")
-fn serve(fixture: String) -> Promise(#(String, fn() -> Nil))
+fn serve(fixture: String) -> Effect(#(String, fn() -> Nil))
 
 fn fresh(directory: String) -> String {
   let _ = simplifile.delete(directory)
@@ -18,9 +18,9 @@ fn install(
   path: String,
   directory: String,
   files: List(String),
-) -> Promise(Result(Nil, String)) {
-  use #(base, close) <- promise.await(serve(fixture))
-  use installed <- promise.map(npm.install(base <> path, directory, files))
+) -> Effect(Result(Nil, String)) {
+  use #(base, close) <- effect.await(serve(fixture))
+  use installed <- effect.map(npm.install(base <> path, directory, files))
   close()
   installed
 }
@@ -28,7 +28,7 @@ fn install(
 pub fn only_the_listed_files_are_installed_test() {
   let directory = fresh("./test_tmp_npm_listed")
   let files = ["bin/tool", "bin/package.json"]
-  use installed <- promise.map(install("/package.tgz", directory, files))
+  use installed <- effect.map(install("/package.tgz", directory, files))
 
   let tool = simplifile.read(directory <> "/bin/tool")
   let readme = simplifile.is_file(directory <> "/README.md")
@@ -45,7 +45,7 @@ pub fn only_the_listed_files_are_installed_test() {
 
 pub fn a_file_the_tarball_lacks_leaves_nothing_installed_test() {
   let directory = fresh("./test_tmp_npm_lacking")
-  use installed <- promise.map(
+  use installed <- effect.map(
     install("/package.tgz", directory, ["bin/tool", "bin/missing"]),
   )
 
@@ -60,7 +60,7 @@ pub fn a_file_the_tarball_lacks_leaves_nothing_installed_test() {
 
 pub fn a_cut_off_download_leaves_nothing_installed_test() {
   let directory = fresh("./test_tmp_npm_cut_off")
-  use installed <- promise.map(
+  use installed <- effect.map(
     install("/truncated.tgz", directory, ["bin/tool", "bin/package.json"]),
   )
 
@@ -74,7 +74,7 @@ pub fn a_cut_off_download_leaves_nothing_installed_test() {
 
 pub fn a_failed_request_names_the_status_test() {
   let directory = fresh("./test_tmp_npm_status")
-  use installed <- promise.map(install("/gone.tgz", directory, ["bin/tool"]))
+  use installed <- effect.map(install("/gone.tgz", directory, ["bin/tool"]))
 
   let assert Error(message) = installed
   assert string.contains(message, "HTTP 404")
@@ -87,7 +87,7 @@ pub fn an_incomplete_install_is_replaced_test() {
   let assert Ok(_) = simplifile.write(directory <> "/bin/tool", "stale")
   let before = npm.installed(directory, files)
 
-  use installed <- promise.map(install("/package.tgz", directory, files))
+  use installed <- effect.map(install("/package.tgz", directory, files))
 
   let tool = simplifile.read(directory <> "/bin/tool")
   let after = npm.installed(directory, files)

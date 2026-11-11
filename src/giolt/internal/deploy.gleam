@@ -1,9 +1,9 @@
 import giolt/internal/api.{type Client, type Deployed, Client}
 import giolt/internal/bundle
 import giolt/internal/credentials.{type Credential}
+import giolt/internal/effect.{type Effect}
 import giolt/internal/io
 import gleam/bit_array
-import gleam/javascript/promise.{type Promise}
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -140,10 +140,10 @@ fn non_empty(value: Option(String)) -> Option(String) {
 pub fn run(
   config: Config(HasArtifact),
   destination: Destination,
-) -> Promise(Result(Deployed, Error)) {
+) -> Effect(Result(Deployed, Error)) {
   let plan = plan(config)
   case check_artifact(plan.artifact_dir) {
-    Error(error) -> promise.resolve(Error(error))
+    Error(error) -> effect.resolve(Error(error))
     Ok(Nil) -> submit(plan, destination)
   }
 }
@@ -196,7 +196,7 @@ fn check_artifact(path: String) -> Result(Nil, Error) {
 fn submit(
   plan: Plan,
   destination: Destination,
-) -> Promise(Result(Deployed, Error)) {
+) -> Effect(Result(Deployed, Error)) {
   io.println_info(
     "Deploying "
     <> plan.artifact_dir
@@ -215,12 +215,12 @@ fn submit(
   }
 
   case files {
-    Error(error) -> promise.resolve(Error(error))
+    Error(error) -> effect.resolve(Error(error))
     Ok(#(modules, assets)) -> {
       let body = deploy_body(plan, modules, assets)
       let ToProject(id:, client:) = destination
       api.create_deployment(client, id, body)
-      |> promise.map(result.map_error(_, Api))
+      |> effect.map(result.map_error(_, Api))
     }
   }
 }

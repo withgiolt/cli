@@ -10,6 +10,7 @@ import giolt/internal/config.{
 import giolt/internal/confirm
 import giolt/internal/credentials.{type Credential, type Session, Credential}
 import giolt/internal/deploy
+import giolt/internal/effect.{type Effect}
 import giolt/internal/io
 import giolt/internal/link
 import giolt/internal/process
@@ -18,7 +19,6 @@ import giolt/internal/signature
 import giolt/internal/watcher
 import gleam/int
 import gleam/io as stdio
-import gleam/javascript/promise.{type Promise}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -42,9 +42,9 @@ const env_token_untouched =
 
 pub fn build(
   config config_path: Option(String),
-) -> Promise(Result(Nil, String)) {
+) -> Effect(Result(Nil, String)) {
   case read_config(config_path, None) {
-    Error(message) -> promise.resolve(Error(message))
+    Error(message) -> effect.resolve(Error(message))
     Ok(config) ->
       case config.artifact {
         Some(path) -> prepare_site(config, path)
@@ -58,9 +58,9 @@ pub fn deploy(
   artifact artifact: Option(String),
   project project: Option(String),
   config config_path: Option(String),
-) -> Promise(Result(Nil, String)) {
+) -> Effect(Result(Nil, String)) {
   case read_config(config_path, artifact) {
-    Error(message) -> promise.resolve(Error(message))
+    Error(message) -> effect.resolve(Error(message))
     Ok(config) ->
       case option.or(artifact, config.artifact) {
         Some(path) ->
@@ -88,8 +88,8 @@ fn build_then_submit(
   artifact: deploy.Config(deploy.HasArtifact),
   preview: Bool,
   project: Option(String),
-  build: fn() -> Promise(Result(Nil, String)),
-) -> Promise(Result(Nil, String)) {
+  build: fn() -> Effect(Result(Nil, String)),
+) -> Effect(Result(Nil, String)) {
   let configured =
     artifact
     |> deploy.preview(preview)
@@ -97,10 +97,10 @@ fn build_then_submit(
 
   // A missing token or unknown project is knowable up front; don't make the
   // user wait for a build.
-  use destination <- promise.try_await(deploy_destination(config, project))
-  use built <- promise.await(build())
+  use destination <- effect.try_await(deploy_destination(config, project))
+  use built <- effect.await(build())
   case built {
-    Error(message) -> promise.resolve(Error(message))
+    Error(message) -> effect.resolve(Error(message))
     Ok(Nil) -> submit(configured, destination)
   }
 }
@@ -108,7 +108,7 @@ fn build_then_submit(
 fn deploy_destination(
   config: Config,
   project: Option(String),
-) -> Promise(Result(deploy.Destination, String)) {
+) -> Effect(Result(deploy.Destination, String)) {
   let route =
     deploy.route(
       project:,
@@ -120,10 +120,10 @@ fn deploy_destination(
     )
 
   case route {
-    Error(error) -> promise.resolve(Error(deploy.describe_error(error)))
-    Ok(deploy.Ready(destination)) -> promise.resolve(Ok(destination))
+    Error(error) -> effect.resolve(Error(deploy.describe_error(error)))
+    Ok(deploy.Ready(destination)) -> effect.resolve(Ok(destination))
     Ok(deploy.Lookup(name:, client:)) -> {
-      use found <- promise.map(api_call(api.find_project(client, name)))
+      use found <- effect.map(api_call(api.find_project(client, name)))
       use found <- result.map(found)
       deploy.ToProject(id: found.id, client:)
     }
@@ -133,13 +133,13 @@ fn deploy_destination(
 pub fn link_project(
   name name: String,
   config config_path: Option(String),
-) -> Promise(Result(Nil, String)) {
+) -> Effect(Result(Nil, String)) {
   let path = option.unwrap(config_path, "gleam.toml")
   case simplifile.read(path) {
-    Error(_) -> promise.resolve(Error(cannot_read(path)))
+    Error(_) -> effect.resolve(Error(cannot_read(path)))
     Ok(source) -> {
       use _, client <- signed_in()
-      use project <- promise.map(api_call(api.find_project(client, name)))
+      use project <- effect.map(api_call(api.find_project(client, name)))
       use project <- result.try(project)
       use edited <- result.try(
         link.set_project(source, project.id)
@@ -161,9 +161,9 @@ pub fn link_project(
 
 pub fn unlink_project(
   config config_path: Option(String),
-) -> Promise(Result(Nil, String)) {
+) -> Effect(Result(Nil, String)) {
   let path = option.unwrap(config_path, "gleam.toml")
-  promise.resolve({
+  effect.resolve({
     use source <- result.try(
       simplifile.read(path)
       |> result.replace_error(cannot_read(path)),
@@ -200,14 +200,14 @@ fn write_config(path: String, text: String) -> Result(Nil, String) {
   |> result.replace_error("Could not write " <> path <> ".")
 }
 
-pub fn dev(config config_path: Option(String)) -> Promise(Result(Nil, String)) {
+pub fn dev(config config_path: Option(String)) -> Effect(Result(Nil, String)) {
   case read_config(config_path, None) {
-    Error(message) -> promise.resolve(Error(message))
+    Error(message) -> effect.resolve(Error(message))
     Ok(config) ->
       case config.artifact, config.target {
         Some(path), _ -> serve_dev(config, path, "")
         None, Erlang ->
-          promise.resolve(Error(
+          effect.resolve(Error(
             "`giolt dev` supports the javascript target only for now."
             <> target_hint,
           ))
@@ -225,8 +225,8 @@ fn serve_dev(
   config: Config,
   static_dir: String,
   worker_path: String,
-) -> Promise(Result(Nil, String)) {
-  use _ <- promise.await(rebuild(config))
+) -> Effect(Result(Nil, String)) {
+  use _ <- effect.await(rebuild(config))
 
   let stop_watching =
     watcher.watch(config.watch, fn(paths) {
@@ -246,24 +246,24 @@ fn serve_dev(
   )
 
   let _ = stop_watching
-  process.forever() |> promise.map(fn(_) { Ok(Nil) })
+  process.forever() |> effect.map(fn(_) { Ok(Nil) })
 }
 
-fn rebuild(config: Config) -> Promise(Nil) {
+fn rebuild(config: Config) -> Effect(Nil) {
   let building = case config.artifact {
     Some(path) -> prepare_site(config, path)
     None -> run_build(config)
   }
 
-  use result <- promise.map(building)
+  use result <- effect.map(building)
   case result {
     Ok(Nil) -> server.notify_reload()
     Error(message) -> io.println_error(message)
   }
 }
 
-fn prepare_site(config: Config, path: String) -> Promise(Result(Nil, String)) {
-  use prebuilt <- promise.map(run_prebuild(config.prebuild))
+fn prepare_site(config: Config, path: String) -> Effect(Result(Nil, String)) {
+  use prebuilt <- effect.map(run_prebuild(config.prebuild))
   use _ <- result.try(prebuilt)
 
   case simplifile.read_directory(path) {
@@ -322,17 +322,17 @@ fn read_config(
   })
 }
 
-fn run_build(config: Config) -> Promise(Result(Nil, String)) {
+fn run_build(config: Config) -> Effect(Result(Nil, String)) {
   let tooling = case config.target {
     Javascript -> Ok(Nil)
     Erlang -> afterglow_bin.check_tooling()
   }
 
   case tooling {
-    Error(message) -> promise.resolve(Error(message))
+    Error(message) -> effect.resolve(Error(message))
     Ok(Nil) -> {
-      use _ <- promise.try_await(run_prebuild(config.prebuild))
-      use _ <- promise.try_await(check_handle(config))
+      use _ <- effect.try_await(run_prebuild(config.prebuild))
+      use _ <- effect.try_await(check_handle(config))
 
       case config.target {
         Javascript -> {
@@ -348,9 +348,9 @@ fn run_build(config: Config) -> Promise(Result(Nil, String)) {
   }
 }
 
-fn run_prebuild(prebuild: Option(String)) -> Promise(Result(Nil, String)) {
+fn run_prebuild(prebuild: Option(String)) -> Effect(Result(Nil, String)) {
   case prebuild {
-    None -> promise.resolve(Ok(Nil))
+    None -> effect.resolve(Ok(Nil))
     Some(command) -> {
       io.println_info("Running prebuild: " <> command)
       process.shell(command)
@@ -358,13 +358,13 @@ fn run_prebuild(prebuild: Option(String)) -> Promise(Result(Nil, String)) {
   }
 }
 
-fn check_handle(config: Config) -> Promise(Result(Nil, String)) {
+fn check_handle(config: Config) -> Effect(Result(Nil, String)) {
   io.println_info("Checking `handle` in " <> config.entry <> "...")
 
   case simplifile.create_directory_all("./build") {
-    Error(_) -> promise.resolve(Error("Could not create the build directory."))
+    Error(_) -> effect.resolve(Error("Could not create the build directory."))
     Ok(Nil) -> {
-      use exported <- promise.map(
+      use exported <- effect.map(
         process.run("gleam", [
           "export",
           "package-interface",
@@ -385,8 +385,8 @@ fn check_handle(config: Config) -> Promise(Result(Nil, String)) {
   }
 }
 
-fn bundle_javascript(config: Config) -> Promise(Result(Nil, String)) {
-  use _ <- promise.try_await(
+fn bundle_javascript(config: Config) -> Effect(Result(Nil, String)) {
+  use _ <- effect.try_await(
     process.run("gleam", ["build", "--target", "javascript"]),
   )
   io.println_progress(2, javascript_steps, "Compiled")
@@ -401,7 +401,7 @@ fn bundle_javascript(config: Config) -> Promise(Result(Nil, String)) {
     None -> base
   }
 
-  use bundled <- promise.map(bundle.run(with_assets))
+  use bundled <- effect.map(bundle.run(with_assets))
   bundled
   |> result.replace_error("Build failed.")
   |> result.map(fn(_) { io.println_progress(3, javascript_steps, "Bundled") })
@@ -410,8 +410,8 @@ fn bundle_javascript(config: Config) -> Promise(Result(Nil, String)) {
 fn submit(
   configured: deploy.Config(deploy.HasArtifact),
   destination: deploy.Destination,
-) -> Promise(Result(Nil, String)) {
-  use result <- promise.map(deploy.run(configured, destination))
+) -> Effect(Result(Nil, String)) {
+  use result <- effect.map(deploy.run(configured, destination))
   case result {
     Ok(deployment) -> {
       deploy.print_result(Ok(deployment))
@@ -421,7 +421,7 @@ fn submit(
   }
 }
 
-pub fn login(token token: Option(String)) -> Promise(Result(Nil, String)) {
+pub fn login(token token: Option(String)) -> Effect(Result(Nil, String)) {
   let api_url = credentials.api_url(env_var(credentials.api_url_env))
   case token {
     None -> login_in_browser(api_url)
@@ -430,9 +430,9 @@ pub fn login(token token: Option(String)) -> Promise(Result(Nil, String)) {
         True -> "Paste the token: "
         False -> ""
       }
-      use line <- promise.await(process.read_line(prompt))
+      use line <- effect.await(process.read_line(prompt))
       case string.trim(line) {
-        "" -> promise.resolve(Error("No token on stdin."))
+        "" -> effect.resolve(Error("No token on stdin."))
         token -> login_with_token(api_url, token)
       }
     }
@@ -443,22 +443,22 @@ pub fn login(token token: Option(String)) -> Promise(Result(Nil, String)) {
 fn login_with_token(
   api_url: String,
   token: String,
-) -> Promise(Result(Nil, String)) {
+) -> Effect(Result(Nil, String)) {
   case credentials.is_api_token(token) {
     True -> {
-      use previous <- promise.try_await(verify_and_store(api_url, token))
+      use previous <- effect.try_await(verify_and_store(api_url, token))
       revoke_previous(previous, token)
     }
     False ->
-      promise.resolve(Error(
+      effect.resolve(Error(
         "That is not an API token. Tokens start with `giolt_` and are made "
         <> "on the dashboard's Tokens page.",
       ))
   }
 }
 
-fn login_in_browser(api_url: String) -> Promise(Result(Nil, String)) {
-  use device <- promise.try_await(api_call(api.start_device_login(api_url)))
+fn login_in_browser(api_url: String) -> Effect(Result(Nil, String)) {
+  use device <- effect.try_await(api_call(api.start_device_login(api_url)))
 
   io.println_info("Your login code is " <> device.user_code)
   io.println_info("Approve it at " <> device.verification_url)
@@ -468,19 +468,19 @@ fn login_in_browser(api_url: String) -> Promise(Result(Nil, String)) {
   }
   io.println_info("Waiting for approval...")
 
-  use token <- promise.try_await(await_approval(
+  use token <- effect.try_await(await_approval(
     api_url,
     device.device_code,
     device.interval,
     device.expires_in,
   ))
-  use stored <- promise.await(verify_and_store(api_url, token))
+  use stored <- effect.await(verify_and_store(api_url, token))
   case stored {
     Ok(previous) -> revoke_previous(previous, token)
     // Nobody else holds this token, so don't leave it live on the server.
     Error(message) -> {
       let unsaved = api.Client(api_url:, token:)
-      use _ <- promise.map(api.revoke_token(unsaved))
+      use _ <- effect.map(api.revoke_token(unsaved))
       Error(message)
     }
   }
@@ -491,28 +491,28 @@ fn await_approval(
   device_code: String,
   interval: Int,
   seconds_left: Int,
-) -> Promise(Result(String, String)) {
+) -> Effect(Result(String, String)) {
   let interval = int.max(interval, 1)
   case seconds_left <= 0 {
-    True -> promise.resolve(Error(login_expired))
+    True -> effect.resolve(Error(login_expired))
     False -> {
-      use _ <- promise.await(process.sleep(interval * 1000))
-      use step <- promise.await(api.poll_device_login(
+      use _ <- effect.await(process.sleep(interval * 1000))
+      use step <- effect.await(api.poll_device_login(
         api_url,
         device_code,
         interval,
       ))
       case step {
-        api.Approved(token) -> promise.resolve(Ok(token))
+        api.Approved(token) -> effect.resolve(Ok(token))
         api.Pending(next) ->
           await_approval(api_url, device_code, next, seconds_left - interval)
-        api.CodeExpired -> promise.resolve(Error(login_expired))
+        api.CodeExpired -> effect.resolve(Error(login_expired))
         api.Denied ->
-          promise.resolve(Error(
+          effect.resolve(Error(
             "The login was denied in the browser. Run `giolt login` to try again.",
           ))
         api.PollFailed(error) ->
-          promise.resolve(Error(api.describe_error(error)))
+          effect.resolve(Error(api.describe_error(error)))
       }
     }
   }
@@ -521,10 +521,10 @@ fn await_approval(
 fn verify_and_store(
   api_url: String,
   token: String,
-) -> Promise(Result(Option(Credential), String)) {
+) -> Effect(Result(Option(Credential), String)) {
   let path = credentials_path()
   let previous = credentials.load(path) |> result.unwrap(None)
-  use me <- promise.map(api_call(api.me(api.Client(api_url:, token:))))
+  use me <- effect.map(api_call(api.me(api.Client(api_url:, token:))))
   use me <- result.try(me)
   use _ <- result.try(
     credentials.save(path, Credential(token:, api_url:))
@@ -540,11 +540,11 @@ fn verify_and_store(
 fn revoke_previous(
   previous: Option(Credential),
   token: String,
-) -> Promise(Result(Nil, String)) {
+) -> Effect(Result(Nil, String)) {
   case previous {
     Some(old) if old.token != token -> {
       let replaced = api.Client(api_url: old.api_url, token: old.token)
-      use revoked <- promise.map(api.revoke_token(replaced))
+      use revoked <- effect.map(api.revoke_token(replaced))
       case api.revocation(revoked) {
         api.NotRevoked(warning) ->
           io.println_warning("The previous login was replaced. " <> warning)
@@ -552,27 +552,27 @@ fn revoke_previous(
       }
       Ok(Nil)
     }
-    _ -> promise.resolve(Ok(Nil))
+    _ -> effect.resolve(Ok(Nil))
   }
 }
 
-pub fn logout() -> Promise(Result(Nil, String)) {
+pub fn logout() -> Effect(Result(Nil, String)) {
   let path = credentials_path()
   case credentials.load(path) {
     Error(_) -> {
       io.println_warning(
         "The stored token is unreadable, so it was not revoked.",
       )
-      promise.resolve(forget(path))
+      effect.resolve(forget(path))
     }
     Ok(None) -> {
       io.println_info("No stored token to remove.")
       warn_if_env_token(env_token_untouched)
-      promise.resolve(Ok(Nil))
+      effect.resolve(Ok(Nil))
     }
     Ok(Some(stored)) -> {
       let client = api.Client(api_url: stored.api_url, token: stored.token)
-      use revoked <- promise.map(api.revoke_token(client))
+      use revoked <- effect.map(api.revoke_token(client))
       case api.revocation(revoked) {
         api.Revoked -> io.println_success("Revoked the token.")
         api.AlreadyInvalid -> Nil
@@ -591,9 +591,9 @@ fn forget(path: String) -> Result(Nil, String) {
   warn_if_env_token(env_token_untouched)
 }
 
-pub fn whoami() -> Promise(Result(Nil, String)) {
+pub fn whoami() -> Effect(Result(Nil, String)) {
   use session, client <- signed_in()
-  use me <- promise.map(api_call(api.me(client)))
+  use me <- effect.map(api_call(api.me(client)))
   use me <- result.map(me)
 
   let expiry = case me.expires_at {
@@ -614,9 +614,9 @@ pub fn whoami() -> Promise(Result(Nil, String)) {
   }
 }
 
-pub fn list_projects() -> Promise(Result(Nil, String)) {
+pub fn list_projects() -> Effect(Result(Nil, String)) {
   use _, client <- signed_in()
-  use projects <- promise.map(api_call(api.list_projects(client)))
+  use projects <- effect.map(api_call(api.list_projects(client)))
   use projects <- result.map(projects)
 
   case projects {
@@ -654,9 +654,9 @@ fn deployment_status(project: api.Project) -> String {
   }
 }
 
-pub fn create_project(name name: String) -> Promise(Result(Nil, String)) {
+pub fn create_project(name name: String) -> Effect(Result(Nil, String)) {
   use _, client <- signed_in()
-  use project <- promise.map(api_call(api.create_project(client, name)))
+  use project <- effect.map(api_call(api.create_project(client, name)))
   use project <- result.map(project)
 
   io.println_success("Created " <> project.slug <> " at " <> project.url)
@@ -665,10 +665,10 @@ pub fn create_project(name name: String) -> Promise(Result(Nil, String)) {
 pub fn rename_project(
   from from: String,
   to to: String,
-) -> Promise(Result(Nil, String)) {
+) -> Effect(Result(Nil, String)) {
   use _, client <- signed_in()
-  use old <- promise.try_await(api_call(api.find_project(client, from)))
-  use renamed <- promise.map(api_call(api.rename_project(client, old.id, to)))
+  use old <- effect.try_await(api_call(api.find_project(client, from)))
+  use renamed <- effect.map(api_call(api.rename_project(client, old.id, to)))
   use renamed <- result.map(renamed)
 
   io.println_success(
@@ -685,30 +685,28 @@ pub fn rename_project(
 pub fn delete_project(
   name name: String,
   yes yes: Bool,
-) -> Promise(Result(Nil, String)) {
+) -> Effect(Result(Nil, String)) {
   case confirm.decide(yes:, interactive: process.is_interactive()) {
     confirm.Refuse ->
-      promise.resolve(Error(
+      effect.resolve(Error(
         "Not deleting "
         <> name
         <> " without confirmation. Pass --yes to delete it from a script.",
       ))
     decision -> {
       use _, client <- signed_in()
-      use project <- promise.try_await(api_call(api.find_project(client, name)))
-      use confirmed <- promise.await(case decision {
+      use project <- effect.try_await(api_call(api.find_project(client, name)))
+      use confirmed <- effect.await(case decision {
         confirm.Ask -> ask_to_type(name)
-        _ -> promise.resolve(True)
+        _ -> effect.resolve(True)
       })
 
       case confirmed {
         False ->
-          promise.resolve(Error(
-            "Not deleted: the name you typed did not match.",
-          ))
+          effect.resolve(Error("Not deleted: the name you typed did not match."))
         True -> {
           let deleting = api_call(api.delete_project(client, project.id))
-          use deleted <- promise.map(deleting)
+          use deleted <- effect.map(deleting)
           use _ <- result.map(deleted)
           io.println_success("Deleted " <> project.slug <> ".")
         }
@@ -717,18 +715,18 @@ pub fn delete_project(
   }
 }
 
-fn ask_to_type(name: String) -> Promise(Bool) {
+fn ask_to_type(name: String) -> Effect(Bool) {
   io.println_warning(
     "This deletes " <> name <> " and all its deployments. It can't be undone.",
   )
   let prompt = "Type " <> name <> " to confirm: "
-  use typed <- promise.map(process.read_line(prompt))
+  use typed <- effect.map(process.read_line(prompt))
   confirm.accepts(expected: name, typed:)
 }
 
-pub fn usage(json json: Bool) -> Promise(Result(Nil, String)) {
+pub fn usage(json json: Bool) -> Effect(Result(Nil, String)) {
   use _, client <- signed_in()
-  use usage <- promise.map(api_call(api.usage(client)))
+  use usage <- effect.map(api_call(api.usage(client)))
   use usage <- result.map(usage)
 
   case json {
@@ -738,10 +736,10 @@ pub fn usage(json json: Bool) -> Promise(Result(Nil, String)) {
 }
 
 fn signed_in(
-  next: fn(Session, api.Client) -> Promise(Result(Nil, String)),
-) -> Promise(Result(Nil, String)) {
+  next: fn(Session, api.Client) -> Effect(Result(Nil, String)),
+) -> Effect(Result(Nil, String)) {
   case open_session() {
-    Error(message) -> promise.resolve(Error(message))
+    Error(message) -> effect.resolve(Error(message))
     Ok(session) ->
       next(session, api.Client(api_url: session.api_url, token: session.token))
   }
@@ -779,6 +777,6 @@ fn warn_if_env_token(message: String) -> Nil {
   }
 }
 
-fn api_call(call: Promise(Result(a, api.Error))) -> Promise(Result(a, String)) {
-  promise.map(call, result.map_error(_, api.describe_error))
+fn api_call(call: Effect(Result(a, api.Error))) -> Effect(Result(a, String)) {
+  effect.map(call, result.map_error(_, api.describe_error))
 }

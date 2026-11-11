@@ -1,5 +1,5 @@
 import filepath
-import gleam/javascript/promise.{type Promise}
+import giolt/internal/effect.{type Effect}
 import gleam/list
 import simplifile
 
@@ -14,4 +14,4 @@ pub fn install(
   url: String,
   directory: String,
   files: List(String),
-) -> Promise(Result(Nil, String))
+) -> Effect(Result(Nil, String))

@@ -2,11 +2,11 @@ import filepath
 import giolt/internal/afterglow
 import giolt/internal/bundle
 import giolt/internal/config.{type Config}
+import giolt/internal/effect.{type Effect}
 import giolt/internal/io
 import giolt/internal/npm
 import giolt/internal/process
 import giolt/internal/tooling
-import gleam/javascript/promise.{type Promise}
 import gleam/list
 import gleam/option.{type Option}
 import gleam/result
@@ -21,20 +21,20 @@ const optimised_wasm = "build/optimised.wasm"
 
 const manifest_path = "./manifest.toml"
 
-pub fn build(config: Config, outdir: String) -> Promise(Result(Nil, String)) {
+pub fn build(config: Config, outdir: String) -> Effect(Result(Nil, String)) {
   case check_outdir(outdir) |> result.try(fn(_) { generate_package(config) }) {
-    Error(message) -> promise.resolve(Error(message))
+    Error(message) -> effect.resolve(Error(message))
     Ok(Nil) -> {
-      use _ <- promise.try_await(compile_to_beam())
+      use _ <- effect.try_await(compile_to_beam())
       progress(afterglow.CompiledToBeam)
 
-      use _ <- promise.try_await(compile_to_wasm())
+      use _ <- effect.try_await(compile_to_wasm())
       progress(afterglow.CompiledToWasm)
 
-      use _ <- promise.try_await(link_and_optimise())
+      use _ <- effect.try_await(link_and_optimise())
       progress(afterglow.LinkedAndOptimised)
 
-      promise.resolve({
+      effect.resolve({
         use _ <- result.try(copy_output(outdir, config.assets))
         progress(afterglow.CopiedWorker)
         Ok(Nil)
@@ -106,7 +106,7 @@ fn generate_package(config: Config) -> Result(Nil, String) {
   })
 }
 
-fn compile_to_beam() -> Promise(Result(Nil, String)) {
+fn compile_to_beam() -> Effect(Result(Nil, String)) {
   io.println_info("Compiling the app to BEAM...")
   process.run_in(afterglow.build_dir, "gleam", [
     "build",
@@ -115,14 +115,14 @@ fn compile_to_beam() -> Promise(Result(Nil, String)) {
   ])
 }
 
-fn compile_to_wasm() -> Promise(Result(Nil, String)) {
+fn compile_to_wasm() -> Effect(Result(Nil, String)) {
   io.println_info("Compiling the app to WebAssembly with afterglow...")
 
-  use otp <- promise.try_await(otp_ebin_dirs())
+  use otp <- effect.try_await(otp_ebin_dirs())
   case compiler_path(), project_ebin_dirs() {
-    Error(message), _ | _, Error(message) -> promise.resolve(Error(message))
+    Error(message), _ | _, Error(message) -> effect.resolve(Error(message))
     Ok(compiler), Ok(project) -> {
-      use _ <- promise.try_await(make_executable(compiler))
+      use _ <- effect.try_await(make_executable(compiler))
 
       let args =
         afterglow.compile_args(
@@ -130,7 +130,7 @@ fn compile_to_wasm() -> Promise(Result(Nil, String)) {
           beam_dirs: list.append(project, otp),
           out: filepath.join(afterglow.build_dir, app_wasm),
         )
-      use compiled <- promise.map(process.output(".", compiler, args))
+      use compiled <- effect.map(process.output(".", compiler, args))
       use #(_, stderr) <- result.map(compiled)
       let afterglow.Warnings(missing:, other:) = afterglow.warnings(stderr)
       case missing {
@@ -145,8 +145,8 @@ fn compile_to_wasm() -> Promise(Result(Nil, String)) {
   }
 }
 
-fn otp_ebin_dirs() -> Promise(Result(List(String), String)) {
-  use printed <- promise.map(
+fn otp_ebin_dirs() -> Effect(Result(List(String), String)) {
+  use printed <- effect.map(
     process.output(".", "erl", ["-noshell", "-eval", afterglow.otp_libs_eval]),
   )
   use #(stdout, _) <- result.map(printed)
@@ -158,9 +158,9 @@ fn compiler_path() -> Result(String, String) {
   filepath.join(afterglow.priv_dir(), "bin/" <> name)
 }
 
-fn make_executable(path: String) -> Promise(Result(Nil, String)) {
+fn make_executable(path: String) -> Effect(Result(Nil, String)) {
   case string.ends_with(path, ".exe") {
-    True -> promise.resolve(Ok(Nil))
+    True -> effect.resolve(Ok(Nil))
     False -> chmod_executable(path)
   }
 }
@@ -177,12 +177,12 @@ fn project_ebin_dirs() -> Result(List(String), String) {
   |> result.replace_error("Could not list the compiled packages in " <> root)
 }
 
-fn link_and_optimise() -> Promise(Result(Nil, String)) {
-  use _ <- promise.try_await(ensure_binaryen())
+fn link_and_optimise() -> Effect(Result(Nil, String)) {
+  use _ <- effect.try_await(ensure_binaryen())
   let runtime = filepath.join(afterglow.priv_dir(), "afterglow_runtime.wasm")
   let at = filepath.join(afterglow.build_dir, _)
 
-  use _ <- promise.try_await(run_binaryen(
+  use _ <- effect.try_await(run_binaryen(
     "wasm-merge",
     afterglow.merge_args(runtime:, app: at(app_wasm), out: at(merged_wasm)),
   ))
@@ -192,11 +192,11 @@ fn link_and_optimise() -> Promise(Result(Nil, String)) {
   )
 }
 
-fn ensure_binaryen() -> Promise(Result(Nil, String)) {
+fn ensure_binaryen() -> Effect(Result(Nil, String)) {
   let dir = afterglow.binaryen_dir()
   let files = afterglow.binaryen_files()
   case npm.installed(dir, files) {
-    True -> promise.resolve(Ok(Nil))
+    True -> effect.resolve(Ok(Nil))
     False -> {
       io.println_info(
         "Downloading Binaryen " <> afterglow.binaryen_version <> "...",
@@ -209,7 +209,7 @@ fn ensure_binaryen() -> Promise(Result(Nil, String)) {
 fn run_binaryen(
   tool: String,
   args: List(String),
-) -> Promise(Result(Nil, String)) {
+) -> Effect(Result(Nil, String)) {
   let script = filepath.join(afterglow.binaryen_dir(), "bin/" <> tool)
   process.run(process.runtime_path(), [script, ..args])
 }
@@ -268,4 +268,4 @@ fn locked_versions(
 }
 
 @external(javascript, "./ffi_afterglow.mjs", "make_executable")
-fn chmod_executable(path: String) -> Promise(Result(Nil, String))
+fn chmod_executable(path: String) -> Effect(Result(Nil, String))
