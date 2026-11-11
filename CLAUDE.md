@@ -80,7 +80,7 @@ from a pure function in `src/giolt/internal/`, each with a matching
 | `config.gleam` | Reading the target, the `[dependencies]` names and every `[tools.giolt]` key, with defaults and typed errors |
 | `signature.gleam` | Checking `handle/1` against the JSON from `gleam export package-interface` |
 | `afterglow.gleam` | The generated afterglow build package (`gleam.toml` pinned to the user's `manifest.toml`, `start/0`), the build steps, the compiler name per platform, the compiler, wasm-merge and wasm-opt arguments, and how the compiler's warnings are reported |
-| `afterglow_bin.gleam` + `ffi_afterglow.mjs` | Running that build: check the platform and tools, generate, `gleam build --target erlang`, compile to Wasm, install Binaryen, link, optimise, copy `app.wasm`, afterglow's `index.mjs` and `host.mjs`, and `assets` into `static/` |
+| `afterglow_bin.gleam` + `ffi_afterglow.mjs` | Running that build: check the platform and tools, generate, `gleam build --target erlang`, compile to Wasm, install Binaryen, link, optimise (skipped by `dev`), copy `app.wasm`, afterglow's `index.mjs` and `host.mjs`, and `assets` into `static/` |
 | `tooling.gleam` | Which tools the Erlang target needs (Erlang/OTP, rebar3), how to probe each (rebar3 through `cmd.exe` on Windows) and how to say one is missing |
 | `esbuild.gleam` | The esbuild argument list (`Plan -> List(String)`), no process spawned, and where the binary sits in its npm package |
 | `esbuild_bin.gleam` | Installing and running the esbuild binary |

@@ -43,7 +43,7 @@ pub fn build(
     Ok(config) ->
       case config.artifact {
         Some(path) -> prepare_site(config, path)
-        None -> run_build(config)
+        None -> run_build(config, optimise: True)
       }
   }
 }
@@ -72,7 +72,7 @@ pub fn deploy(
             deploy.artifact(deploy.new(), config.outdir),
             preview,
             project,
-            fn() { run_build(config) },
+            fn() { run_build(config, optimise: True) },
           )
       }
   }
@@ -248,7 +248,7 @@ fn serve_dev(
 fn rebuild(config: Config) -> Effect(Nil) {
   let building = case config.artifact {
     Some(path) -> prepare_site(config, path)
-    None -> run_build(config)
+    None -> run_build(config, optimise: False)
   }
 
   use result <- effect.map(building)
@@ -318,7 +318,10 @@ fn read_config(
   })
 }
 
-fn run_build(config: Config) -> Effect(Result(Nil, String)) {
+fn run_build(
+  config: Config,
+  optimise optimise: Bool,
+) -> Effect(Result(Nil, String)) {
   let tooling = case config.target {
     Javascript -> Ok(Nil)
     Erlang -> afterglow_bin.check_tooling()
@@ -337,7 +340,7 @@ fn run_build(config: Config) -> Effect(Result(Nil, String)) {
         }
         Erlang -> {
           afterglow_bin.progress(afterglow.CheckedHandle)
-          afterglow_bin.build(config, config.outdir)
+          afterglow_bin.build(config, config.outdir, optimise:)
         }
       }
     }

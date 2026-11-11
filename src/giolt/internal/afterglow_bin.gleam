@@ -21,7 +21,11 @@ const optimised_wasm = "build/optimised.wasm"
 
 const manifest_path = "./manifest.toml"
 
-pub fn build(config: Config, outdir: String) -> Effect(Result(Nil, String)) {
+pub fn build(
+  config: Config,
+  outdir: String,
+  optimise optimise: Bool,
+) -> Effect(Result(Nil, String)) {
   case check_outdir(outdir) |> result.try(fn(_) { generate_package(config) }) {
     Error(message) -> effect.resolve(Error(message))
     Ok(Nil) -> {
@@ -31,11 +35,22 @@ pub fn build(config: Config, outdir: String) -> Effect(Result(Nil, String)) {
       use _ <- effect.try_await(compile_to_wasm())
       progress(afterglow.CompiledToWasm)
 
-      use _ <- effect.try_await(link_and_optimise())
-      progress(afterglow.LinkedAndOptimised)
+      use _ <- effect.try_await(link())
+      use wasm <- effect.try_await(case optimise {
+        True -> {
+          use optimised <- effect.map(optimise_linked())
+          use _ <- result.map(optimised)
+          progress(afterglow.LinkedAndOptimised)
+          optimised_wasm
+        }
+        False -> {
+          progress(afterglow.Linked)
+          effect.resolve(Ok(merged_wasm))
+        }
+      })
 
       effect.resolve({
-        use _ <- result.try(copy_output(outdir, config.assets))
+        use _ <- result.try(copy_output(wasm, outdir, config.assets))
         progress(afterglow.CopiedWorker)
         Ok(Nil)
       })
@@ -177,15 +192,19 @@ fn project_ebin_dirs() -> Result(List(String), String) {
   |> result.replace_error("Could not list the compiled packages in " <> root)
 }
 
-fn link_and_optimise() -> Effect(Result(Nil, String)) {
+fn link() -> Effect(Result(Nil, String)) {
   use _ <- effect.try_await(ensure_binaryen())
   let runtime = filepath.join(afterglow.priv_dir(), "afterglow_runtime.wasm")
   let at = filepath.join(afterglow.build_dir, _)
 
-  use _ <- effect.try_await(run_binaryen(
+  run_binaryen(
     "wasm-merge",
     afterglow.merge_args(runtime:, app: at(app_wasm), out: at(merged_wasm)),
-  ))
+  )
+}
+
+fn optimise_linked() -> Effect(Result(Nil, String)) {
+  let at = filepath.join(afterglow.build_dir, _)
   run_binaryen(
     "wasm-opt",
     afterglow.optimise_args(input: at(merged_wasm), out: at(optimised_wasm)),
@@ -214,9 +233,13 @@ fn run_binaryen(
   process.run(process.runtime_path(), [script, ..args])
 }
 
-fn copy_output(outdir: String, assets: Option(String)) -> Result(Nil, String) {
+fn copy_output(
+  wasm: String,
+  outdir: String,
+  assets: Option(String),
+) -> Result(Nil, String) {
   let files = [
-    #(filepath.join(afterglow.build_dir, optimised_wasm), "app.wasm"),
+    #(filepath.join(afterglow.build_dir, wasm), "app.wasm"),
     ..list.map(afterglow.worker_files, fn(name) {
       #(filepath.join(afterglow.priv_dir(), name), name)
     })
