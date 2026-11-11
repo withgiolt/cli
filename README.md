@@ -141,6 +141,9 @@ and afterglow's Worker entry, `index.mjs` and `host.mjs`, plus `static/` when
 `assets` is set. It needs afterglow 0.2.0 or later. afterglow runs on Linux and
 macOS (x64 and arm64) and Windows (x64).
 
+`giolt dev` skips Binaryen's optimisation pass, which takes most of a build,
+so its `app.wasm` is larger than the one `build` and `deploy` make.
+
 The build uses the versions your `manifest.toml` locks. If afterglow needs a
 newer version of one of them, dependency resolution fails; run `gleam update`
 in your project and build again.

@@ -54,6 +54,7 @@ pub type Step {
   CompiledToBeam
   CompiledToWasm
   LinkedAndOptimised
+  Linked
   CopiedWorker
 }
 
@@ -70,7 +71,7 @@ pub fn step_number(step: Step) -> Int {
     CheckedHandle -> 1
     CompiledToBeam -> 2
     CompiledToWasm -> 3
-    LinkedAndOptimised -> 4
+    LinkedAndOptimised | Linked -> 4
     CopiedWorker -> 5
   }
 }
@@ -81,6 +82,7 @@ pub fn step_label(step: Step) -> String {
     CompiledToBeam -> "Compiled to BEAM"
     CompiledToWasm -> "Compiled to WebAssembly"
     LinkedAndOptimised -> "Linked and optimised"
+    Linked -> "Linked, not optimised"
     CopiedWorker -> "Copied the Worker"
   }
 }

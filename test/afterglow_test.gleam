@@ -120,6 +120,11 @@ pub fn steps_are_numbered_in_order_test() {
     == list.index_map(afterglow.steps, fn(_, index) { index + 1 })
 }
 
+pub fn the_unoptimised_link_takes_the_optimised_link_step_test() {
+  assert afterglow.step_number(afterglow.Linked) == 4
+  assert afterglow.step_label(afterglow.Linked) == "Linked, not optimised"
+}
+
 pub fn compiler_names_match_the_hex_package_test() {
   assert afterglow.compiler_name("linux-x64") == Ok("afterglow-linux-x64")
   assert afterglow.compiler_name("linux-arm64") == Ok("afterglow-linux-arm64")
