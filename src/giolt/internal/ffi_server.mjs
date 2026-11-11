@@ -110,13 +110,33 @@ const devPlatform = Object.freeze(Object.create(null));
 
 // Bun ignores the query string when caching ES modules, so each version is
 // imported from its own temporary copy next to the bundle.
-async function loadWorker(workerPath) {
+async function importFresh(modulePath) {
+  const copy = join(dirname(modulePath), `.giolt-dev-${reloadVersion}.mjs`);
+  try {
+    await copyFile(modulePath, copy);
+    return await import(pathToFileURL(copy).href);
+  } finally {
+    await rm(copy, { force: true });
+  }
+}
+
+// afterglow's index.mjs imports app.wasm, which Node and Bun can't load
+// without a flag, so the dev server does what index.mjs does by hand.
+async function loadWasmApp(directory) {
+  const { instantiate } = await importFresh(join(directory, "host.mjs"));
+  const bytes = await readFile(join(directory, "app.wasm"));
+  const app = instantiate(new WebAssembly.Module(bytes));
+  return { fetch: (request, platform) => app.handle(request, platform) };
+}
+
+async function loadWorker(workerKind, workerPath) {
   if (loadedWorker.version === reloadVersion) return loadedWorker.worker;
 
-  const copy = join(dirname(workerPath), `.giolt-dev-${reloadVersion}.mjs`);
   try {
-    await copyFile(workerPath, copy);
-    const worker = (await import(pathToFileURL(copy).href)).default;
+    const worker =
+      workerKind === "wasm"
+        ? await loadWasmApp(workerPath)
+        : (await importFresh(workerPath)).default;
     loadedWorker = { version: reloadVersion, worker };
     return worker;
   } catch (error) {
@@ -126,13 +146,11 @@ async function loadWorker(workerPath) {
       return loadedWorker.worker;
     }
     throw error;
-  } finally {
-    await rm(copy, { force: true });
   }
 }
 
-async function serveWorker(workerPath, req, res) {
-  if (!workerPath) {
+async function serveWorker(workerKind, workerPath, req, res) {
+  if (!workerKind) {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     res.end("Not found");
     return;
@@ -140,7 +158,7 @@ async function serveWorker(workerPath, req, res) {
 
   let worker;
   try {
-    worker = await loadWorker(workerPath);
+    worker = await loadWorker(workerKind, workerPath);
   } catch (error) {
     res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
     res.end(
@@ -186,7 +204,7 @@ async function serveWorker(workerPath, req, res) {
   }
 }
 
-export function serve(port, staticDir, workerPath, liveReload, spa) {
+export function serve(port, staticDir, workerKind, workerPath, liveReload, spa) {
   liveReloadEnabled = liveReload;
 
   const server = createServer(async (req, res) => {
@@ -205,12 +223,12 @@ export function serve(port, staticDir, workerPath, liveReload, spa) {
 
       if (
         staticDir &&
-        (await serveStatic(staticDir, req.method ?? "GET", req.url ?? "/", res, spa && !workerPath, Boolean(workerPath)))
+        (await serveStatic(staticDir, req.method ?? "GET", req.url ?? "/", res, spa && !workerKind, Boolean(workerKind)))
       ) {
         return;
       }
 
-      await serveWorker(workerPath, req, res);
+      await serveWorker(workerKind, workerPath, req, res);
     } catch (error) {
       res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
       res.end(`[Giolt] ${error?.stack ?? error}`);

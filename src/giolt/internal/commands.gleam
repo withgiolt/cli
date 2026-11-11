@@ -29,11 +29,6 @@ const javascript_steps = 3
 
 const interface_path = "./build/.giolt-interface.json"
 
-// A gleam.toml with no `target` is the Erlang target, which is what most
-// people hit here, so the way out is named.
-const target_hint =
-  " Set `target = \"javascript\"` in gleam.toml to use the JavaScript target."
-
 const login_expired =
   "The login code expired before it was approved. Run `giolt login` to get a new one."
 
@@ -205,17 +200,18 @@ pub fn dev(config config_path: Option(String)) -> Effect(Result(Nil, String)) {
     Error(message) -> effect.resolve(Error(message))
     Ok(config) ->
       case config.artifact, config.target {
-        Some(path), _ -> serve_dev(config, path, "")
+        Some(path), _ -> serve_dev(config, path, server.NoWorker)
         None, Erlang ->
-          effect.resolve(Error(
-            "`giolt dev` supports the javascript target only for now."
-            <> target_hint,
-          ))
+          serve_dev(
+            config,
+            option.unwrap(config.assets, ""),
+            server.Wasm(config.outdir),
+          )
         None, Javascript ->
           serve_dev(
             config,
             option.unwrap(config.assets, ""),
-            filepath.join(config.outdir, "index.mjs"),
+            server.Bundle(filepath.join(config.outdir, "index.mjs")),
           )
       }
   }
@@ -224,7 +220,7 @@ pub fn dev(config config_path: Option(String)) -> Effect(Result(Nil, String)) {
 fn serve_dev(
   config: Config,
   static_dir: String,
-  worker_path: String,
+  worker: server.Worker,
 ) -> Effect(Result(Nil, String)) {
   use _ <- effect.await(rebuild(config))
 
@@ -240,7 +236,7 @@ fn serve_dev(
       "" -> None
       path -> Some(path)
     },
-    worker_path:,
+    worker:,
     live_reload: config.live_reload,
     spa: config.spa,
   )
