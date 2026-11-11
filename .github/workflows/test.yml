@@ -42,3 +42,69 @@ jobs:
 
       - name: Run tests
         run: gleam test --target javascript --runtime ${{ startsWith(matrix.runtime, 'node') && 'nodejs' || 'bun' }}
+
+  # Builds a real Erlang-target app with the published afterglow the CLI
+  # asks for, so a release whose output afterglow can't satisfy fails here
+  # rather than for users. The response check runs app.wasm through the
+  # host.mjs afterglow ships, the way its index.mjs does on a Worker.
+  erlang-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          gleam-version: "1.19"
+          rebar3-version: "3.27"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build an Erlang-target app
+        run: |
+          app="$RUNNER_TEMP/erl_app"
+          mkdir -p "$app/src" "$app/public"
+          cat > "$app/gleam.toml" <<EOF
+          name = "erl_app"
+          version = "1.0.0"
+          target = "erlang"
+
+          [dependencies]
+          gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+          wisp = ">= 2.2.2 and < 3.0.0"
+
+          [dev-dependencies]
+          giolt = { path = "$GITHUB_WORKSPACE" }
+
+          [tools.giolt]
+          assets = "./public"
+          EOF
+          cat > "$app/src/erl_app.gleam" <<'EOF'
+          import wisp
+
+          pub fn handle(req: wisp.Request) -> wisp.Response {
+            wisp.ok() |> wisp.string_body("erlang says hi from " <> req.path)
+          }
+          EOF
+          echo "static asset" > "$app/public/hello.txt"
+          cd "$app"
+          gleam run --target javascript -m giolt build
+
+      - name: Check the output
+        working-directory: ${{ runner.temp }}/erl_app/dist
+        run: |
+          ls app.wasm index.mjs host.mjs static/hello.txt
+          grep -q '"./host.mjs"' index.mjs
+          cat > check.mjs <<'EOF'
+          import { readFileSync } from "node:fs";
+          import { instantiate } from "./host.mjs";
+          const app = instantiate(new WebAssembly.Module(readFileSync("app.wasm")));
+          const response = await app.handle(new Request("http://localhost/ci"), {});
+          const body = await response.text();
+          if (response.status !== 200 || body !== "erlang says hi from /ci") {
+            throw new Error(`unexpected response ${response.status}: ${body}`);
+          }
+          EOF
+          node check.mjs
