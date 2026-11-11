@@ -35,7 +35,7 @@ pub fn build_package_depends_on_the_project_and_the_runtime_test() {
   assert string.contains(toml, "name = \"giolt_afterglow_build\"\n")
   assert string.contains(toml, "target = \"erlang\"\n")
   assert string.contains(toml, "hello = { path = \"../../..\" }\n")
-  assert string.contains(toml, "afterglow = \">= 0.1.0 and < 1.0.0\"\n")
+  assert string.contains(toml, "afterglow = \">= 0.2.0 and < 1.0.0\"\n")
   assert string.contains(toml, "gleam_stdlib = \">= 1.0.0 and < 2.0.0\"\n")
 }
 
@@ -49,7 +49,7 @@ pub fn build_package_pins_the_versions_the_user_locked_test() {
   assert string.contains(toml, "gleam_stdlib = \"== 1.0.5\"\n")
   assert string.contains(toml, "wisp = \"== 2.2.2\"\n")
   assert !string.contains(toml, "gleam_stdlib = \">=")
-  assert string.contains(toml, "afterglow = \">= 0.1.0 and < 1.0.0\"\n")
+  assert string.contains(toml, "afterglow = \">= 0.2.0 and < 1.0.0\"\n")
 }
 
 const manifest =
@@ -247,4 +247,31 @@ pub fn binaryen_comes_from_its_versioned_npm_tarball_test() {
   assert afterglow.binaryen_dir()
     == "./build/dev/bin/binaryen-" <> afterglow.binaryen_version
   assert list.contains(afterglow.binaryen_files(), "bin/package.json")
+}
+
+// afterglow 0.2.0 ships its Worker entry as index.mjs, the name the platform
+// wraps, next to the host.mjs it imports. 0.1.x shipped a single index.js.
+pub fn the_worker_is_afterglows_entry_and_host_test() {
+  assert afterglow.worker_files == ["index.mjs", "host.mjs"]
+}
+
+// The build package pins whatever afterglow the user's manifest locks, so a
+// lock on an older afterglow would skip the minimum the CLI needs and fail
+// later, copying files that release doesn't have.
+pub fn a_locked_afterglow_older_than_0_2_is_refused_test() {
+  let assert Error(message) =
+    afterglow.check_locked_runtime([#("afterglow", "0.1.1"), #("wisp", "2.2.2")])
+  assert string.contains(message, "0.1.1")
+  assert string.contains(message, "gleam update afterglow")
+}
+
+pub fn a_locked_afterglow_from_1_0_is_refused_test() {
+  let assert Error(_) =
+    afterglow.check_locked_runtime([#("afterglow", "1.0.0")])
+}
+
+pub fn a_supported_or_absent_afterglow_lock_passes_test() {
+  assert afterglow.check_locked_runtime([#("afterglow", "0.2.0")]) == Ok(Nil)
+  assert afterglow.check_locked_runtime([#("afterglow", "0.13.4")]) == Ok(Nil)
+  assert afterglow.check_locked_runtime([#("wisp", "2.2.2")]) == Ok(Nil)
 }

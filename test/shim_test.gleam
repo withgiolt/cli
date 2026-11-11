@@ -75,3 +75,16 @@ pub fn render_escapes_quotes_in_path_test() {
 
   assert string.contains(rendered, "from \"/home/we\\\"ird/app.mjs\";")
 }
+
+// The platform hands its capability object to `fetch` as the second
+// argument. The shim keeps it under a registered symbol, which a library in
+// the same bundle can read without importing the shim.
+pub fn render_keeps_the_platform_argument_test() {
+  let rendered = shim.render("/home/user/app/build/dev/javascript/app/app.mjs")
+
+  assert string.contains(rendered, "async fetch(request, platform, _ctx)")
+  assert string.contains(
+    rendered,
+    "globalThis[Symbol.for(\"giolt.platform\")] = platform;",
+  )
+}

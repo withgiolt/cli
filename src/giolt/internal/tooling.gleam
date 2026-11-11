@@ -23,6 +23,7 @@ pub fn probe(tool: Tool, windows windows: Bool) -> #(String, List(String)) {
 pub fn describe_missing(missing: List(Tool)) -> String {
   "Building for the Erlang target needs tools that are not installed:\n"
   <> string.join(list.map(missing, hint), "\n")
+  <> "\nA gleam.toml with no `target` builds for Erlang. Set `target = \"javascript\"` for a JavaScript app."
 }
 
 fn hint(tool: Tool) -> String {

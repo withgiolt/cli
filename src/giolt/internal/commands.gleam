@@ -62,8 +62,8 @@ pub fn deploy(
   case read_config(config_path, artifact) {
     Error(message) -> promise.resolve(Error(message))
     Ok(config) ->
-      case option.or(artifact, config.artifact), config.target {
-        Some(path), _ ->
+      case option.or(artifact, config.artifact) {
+        Some(path) ->
           build_then_submit(
             config,
             deploy.assets(deploy.new(), path),
@@ -71,12 +71,7 @@ pub fn deploy(
             project,
             fn() { prepare_site(config, path) },
           )
-        None, Erlang ->
-          promise.resolve(Error(
-            "Deploying the Erlang target is not supported by the Giolt platform yet."
-            <> target_hint,
-          ))
-        None, Javascript ->
+        None ->
           build_then_submit(
             config,
             deploy.artifact(deploy.new(), config.outdir),
@@ -346,7 +341,6 @@ fn run_build(config: Config) -> Promise(Result(Nil, String)) {
         }
         Erlang -> {
           afterglow_bin.progress(afterglow.CheckedHandle)
-          warn_unused_assets(config)
           afterglow_bin.build(config, config.outdir)
         }
       }
@@ -411,16 +405,6 @@ fn bundle_javascript(config: Config) -> Promise(Result(Nil, String)) {
   bundled
   |> result.replace_error("Build failed.")
   |> result.map(fn(_) { io.println_progress(3, javascript_steps, "Bundled") })
-}
-
-fn warn_unused_assets(config: Config) -> Nil {
-  case config.assets {
-    Some(_) ->
-      io.println_warning(
-        "`assets` is ignored for the Erlang target: afterglow apps have no static directory yet.",
-      )
-    None -> Nil
-  }
 }
 
 fn submit(

@@ -1,3 +1,4 @@
+import gleam/int
 import gleam/list
 import gleam/result
 import gleam/set.{type Set}
@@ -10,11 +11,43 @@ pub const build_dir = "./build/.giolt/afterglow"
 
 pub const start_module = "giolt_afterglow_start"
 
-const runtime_range = ">= 0.1.0 and < 1.0.0"
+// 0.2.0 is the first release whose priv/ holds index.mjs and host.mjs.
+const runtime_range = ">= 0.2.0 and < 1.0.0"
+
+// The build package pins whatever afterglow the user's manifest locks, which
+// would skip `runtime_range`, so a lock outside it is refused here.
+pub fn check_locked_runtime(
+  locked: List(#(String, String)),
+) -> Result(Nil, String) {
+  case list.key_find(locked, "afterglow") {
+    Error(Nil) -> Ok(Nil)
+    Ok(version) ->
+      case string.split(version, ".") {
+        ["0", minor, ..] ->
+          case int.parse(minor) {
+            Ok(minor) if minor >= 2 -> Ok(Nil)
+            _ -> Error(unsupported_lock(version))
+          }
+        _ -> Error(unsupported_lock(version))
+      }
+  }
+}
+
+fn unsupported_lock(version: String) -> String {
+  "Your manifest.toml locks afterglow "
+  <> version
+  <> ", but giolt needs afterglow "
+  <> runtime_range
+  <> ". Run `gleam update afterglow`."
+}
 
 pub fn priv_dir() -> String {
   build_dir <> "/build/packages/afterglow/priv"
 }
+
+// Copied from priv/ next to app.wasm. index.mjs is the Worker entry, the
+// module Giolt wraps on deploy as it does a JavaScript app's bundle.
+pub const worker_files = ["index.mjs", "host.mjs"]
 
 pub type Step {
   CheckedHandle

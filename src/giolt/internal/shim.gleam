@@ -10,7 +10,12 @@ import * as conversation from \"../conversation/conversation.mjs\";
 import * as app from \"{entry}\";
 
 export default {
-  async fetch(request, _env, _ctx) {
+  // Giolt passes its platform capabilities as the second argument, never
+  // `env`. They are kept under a registered symbol so that a library bundled
+  // with the app can reach them without importing this entry.
+  async fetch(request, platform, _ctx) {
+    globalThis[Symbol.for(\"giolt.platform\")] = platform;
+
     if (typeof app.handle !== \"function\") {
       return new Response(
         \"[Giolt] {entry} does not export a `handle` function. The export was renamed from `handler` to `handle`.\",

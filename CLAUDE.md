@@ -78,7 +78,7 @@ from a pure function in `src/giolt/internal/`, each with a matching
 | `config.gleam` | Reading the target, the `[dependencies]` names and every `[tools.giolt]` key, with defaults and typed errors |
 | `signature.gleam` | Checking `handle/1` against the JSON from `gleam export package-interface` |
 | `afterglow.gleam` | The generated afterglow build package (`gleam.toml` pinned to the user's `manifest.toml`, `start/0`), the build steps, the compiler name per platform, the compiler, wasm-merge and wasm-opt arguments, and how the compiler's warnings are reported |
-| `afterglow_bin.gleam` + `ffi_afterglow.mjs` | Running that build: check the platform and tools, generate, `gleam build --target erlang`, compile to Wasm, install Binaryen, link, optimise, copy `app.wasm` and `index.js` |
+| `afterglow_bin.gleam` + `ffi_afterglow.mjs` | Running that build: check the platform and tools, generate, `gleam build --target erlang`, compile to Wasm, install Binaryen, link, optimise, copy `app.wasm`, afterglow's `index.mjs` and `host.mjs`, and `assets` into `static/` |
 | `tooling.gleam` | Which tools the Erlang target needs (Erlang/OTP, rebar3), how to probe each (rebar3 through `cmd.exe` on Windows) and how to say one is missing |
 | `esbuild.gleam` | The esbuild argument list (`Plan -> List(String)`), no process spawned, and where the binary sits in its npm package |
 | `esbuild_bin.gleam` | Installing and running the esbuild binary |
@@ -152,12 +152,19 @@ only reads, writes and calls it.
 - **Node 20+ and Bun are the supported runtimes** (`gleam run -m giolt` and
   `gleam run --runtime bun -m giolt`); Deno is not supported. Node 20 is the
   floor because `fs.watch` is only recursive on Linux from there. The Erlang
-  target's output is only `app.wasm` and `index.js`.
+  target's output is only `app.wasm`, `index.mjs`, `host.mjs` and `static/`.
 - **Comments are minimal.** Almost no doc comments in `src/`. Let names and
   types carry the meaning; the few comments that exist are load-bearing.
 - **The runtime package `afterglow` is declared as a Hex range** in the
-  generated `gleam.toml` (`internal/afterglow.gleam`). Deploying the Erlang target is not
-  supported by the platform yet, so `giolt deploy` refuses it.
+  generated `gleam.toml` (`internal/afterglow.gleam`). `giolt deploy` uploads the
+  Erlang target's output like a JavaScript build: afterglow's `index.mjs` is the
+  entry the platform wraps.
+- **The platform's capabilities arrive as `fetch`'s second argument.** The
+  shim keeps them under `Symbol.for("giolt.platform")` and never reads `env`.
+  The platform passes one frozen object to every request, so a request never
+  sees another's through that global. afterglow's entry passes only the
+  object's string values to the Wasm, as vars, so a capability that is a
+  function cannot reach an Erlang app until afterglow has host imports for it.
 
 ## Vendored code
 

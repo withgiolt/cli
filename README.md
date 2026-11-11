@@ -42,7 +42,7 @@ and fails with the expected and found types when it does not match.
 | --- | --- |
 | `giolt build [--config FILE]` | Checks `handle`, compiles and bundles into `outdir` |
 | `giolt dev [--config FILE]` | Builds, watches `watch`, serves on `port` and reloads on change (JavaScript target) |
-| `giolt deploy [--preview] [--artifact DIR] [--project NAME] [--config FILE]` | Builds, then uploads `outdir` to Giolt (JavaScript target). With `artifact`, uploads that directory instead |
+| `giolt deploy [--preview] [--artifact DIR] [--project NAME] [--config FILE]` | Builds, then uploads `outdir` to Giolt. With `artifact`, uploads that directory instead |
 | `giolt link NAME [--config FILE]` | Writes `project = <id>` under `[tools.giolt]`, so `deploy` needs no flags. Commit the file so CI deploys there too |
 | `giolt unlink [--config FILE]` | Removes that `project` line |
 | `giolt help` | Prints the commands. `giolt <command> --help` prints that command's flags |
@@ -132,8 +132,9 @@ A project with `target = "erlang"` builds with
 BEAM bytecode to WebAssembly. You need Erlang/OTP and rebar3 installed, and
 `giolt build` tells you which one is missing. The first build downloads
 Binaryen from npm into `build/dev/bin`. The output in `outdir` is `app.wasm`
-and `index.js`. afterglow runs on Linux and macOS (x64 and arm64) and Windows
-(x64).
+and afterglow's Worker entry, `index.mjs` and `host.mjs`, plus `static/` when
+`assets` is set. It needs afterglow 0.2.0 or later. afterglow runs on Linux and
+macOS (x64 and arm64) and Windows (x64).
 
 The build uses the versions your `manifest.toml` locks. If afterglow needs a
 newer version of one of them, dependency resolution fails; run `gleam update`
@@ -141,8 +142,8 @@ in your project and build again.
 
 When the app reaches a function afterglow does not provide, such as
 `crypto:mac/4`, `giolt build` lists it and still builds. A request that calls
-one gets a 500 whose body names the function. `dev` and `deploy` do not
-support this target yet.
+one gets a 500 whose body names the function. `deploy` uploads the output the
+same way as a JavaScript build. `dev` does not support this target yet.
 
 ## Issues
 

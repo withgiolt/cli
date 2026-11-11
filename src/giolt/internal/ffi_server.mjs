@@ -104,6 +104,10 @@ async function readRequestBody(req) {
 
 let loadedWorker = { version: -1, worker: null };
 
+// Shaped like the capability object Giolt passes as `fetch`'s second
+// argument when deployed: frozen, empty and without a prototype.
+const devPlatform = Object.freeze(Object.create(null));
+
 // Bun ignores the query string when caching ES modules, so each version is
 // imported from its own temporary copy next to the bundle.
 async function loadWorker(workerPath) {
@@ -165,7 +169,7 @@ async function serveWorker(workerPath, req, res) {
     body,
   });
 
-  const response = await worker.fetch(request, {}, {});
+  const response = await worker.fetch(request, devPlatform, {});
   const headers = {};
   response.headers.forEach((value, key) => {
     headers[key] = value;

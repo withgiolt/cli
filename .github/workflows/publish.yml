@@ -7,7 +7,18 @@ on:
   workflow_dispatch:
 
 jobs:
+  # A tag that doesn't match gleam.toml would publish the wrong version
+  # under the right name, or the other way round.
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: grep -qx "version = \"${GITHUB_REF_NAME#v}\"" gleam.toml
+
   publish-hex:
+    needs: check-version
     environment: Production
     runs-on: ubuntu-latest
     permissions:
@@ -38,6 +49,7 @@ jobs:
           HEXPM_API_KEY: ${{ secrets.HEXPM_API_KEY }}
 
   publish-npm:
+    needs: check-version
     environment: Production
     runs-on: ubuntu-latest
     permissions:
