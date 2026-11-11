@@ -10,11 +10,16 @@ pub const build_dir = "./build/.giolt/afterglow"
 
 pub const start_module = "giolt_afterglow_start"
 
-const runtime_range = ">= 0.1.0 and < 1.0.0"
+// 0.2.0 is the first release whose priv/ holds index.mjs and host.mjs.
+const runtime_range = ">= 0.2.0 and < 1.0.0"
 
 pub fn priv_dir() -> String {
   build_dir <> "/build/packages/afterglow/priv"
 }
+
+// Copied from priv/ next to app.wasm. index.mjs is the Worker entry, the
+// module Giolt wraps on deploy as it does a JavaScript app's bundle.
+pub const worker_files = ["index.mjs", "host.mjs"]
 
 pub type Step {
   CheckedHandle

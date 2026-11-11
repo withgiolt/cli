@@ -10,6 +10,15 @@ pub fn missing_tools_are_named_with_a_hint_test() {
   assert string.contains(message, "https://rebar3.org")
 }
 
+// `deploy` used to refuse the Erlang target with this hint. A JavaScript app
+// whose gleam.toml lacks `target` now reaches the tools check instead, so
+// the way out is named there.
+pub fn missing_tools_name_the_javascript_target_test() {
+  let message = tooling.describe_missing([Erlang])
+
+  assert string.contains(message, "target = \"javascript\"")
+}
+
 pub fn only_the_missing_tools_are_named_test() {
   let message = tooling.describe_missing([Rebar3])
 

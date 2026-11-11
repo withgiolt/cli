@@ -204,7 +204,7 @@ fn run_esbuild(
   }
 }
 
-fn copy_static(
+pub fn copy_static(
   static_dir: Option(String),
   outdir: String,
 ) -> Result(Nil, Error) {

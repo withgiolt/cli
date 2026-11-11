@@ -8,6 +8,7 @@ import giolt/internal/process
 import giolt/internal/tooling
 import gleam/javascript/promise.{type Promise}
 import gleam/list
+import gleam/option.{type Option}
 import gleam/result
 import gleam/string
 import simplifile
@@ -34,7 +35,7 @@ pub fn build(config: Config, outdir: String) -> Promise(Result(Nil, String)) {
       progress(afterglow.LinkedAndOptimised)
 
       promise.resolve({
-        use _ <- result.try(copy_output(outdir))
+        use _ <- result.try(copy_output(outdir, config.assets))
         progress(afterglow.CopiedWorker)
         Ok(Nil)
       })
@@ -212,10 +213,12 @@ fn run_binaryen(
   process.run(process.runtime_path(), [script, ..args])
 }
 
-fn copy_output(outdir: String) -> Result(Nil, String) {
+fn copy_output(outdir: String, assets: Option(String)) -> Result(Nil, String) {
   let files = [
     #(filepath.join(afterglow.build_dir, optimised_wasm), "app.wasm"),
-    #(filepath.join(afterglow.priv_dir(), "index.js"), "index.js"),
+    ..list.map(afterglow.worker_files, fn(name) {
+      #(filepath.join(afterglow.priv_dir(), name), name)
+    })
   ]
 
   let _ = simplifile.delete(outdir)
@@ -224,12 +227,19 @@ fn copy_output(outdir: String) -> Result(Nil, String) {
     |> result.map_error(describe_file_error),
   )
 
-  list.try_each(files, fn(file) {
-    simplifile.copy_file(file.0, filepath.join(outdir, file.1))
-    |> result.map_error(fn(error) {
-      "Could not copy " <> file.0 <> ": " <> simplifile.describe_error(error)
-    })
-  })
+  use _ <- result.try(
+    list.try_each(files, fn(file) {
+      simplifile.copy_file(file.0, filepath.join(outdir, file.1))
+      |> result.map_error(fn(error) {
+        "Could not copy " <> file.0 <> ": " <> simplifile.describe_error(error)
+      })
+    }),
+  )
+
+  // The same static/ directory the JavaScript bundle writes, so a deploy
+  // uploads it as assets on either target.
+  bundle.copy_static(assets, outdir)
+  |> result.map_error(bundle.describe_error)
 }
 
 fn describe_file_error(error: simplifile.FileError) -> String {
