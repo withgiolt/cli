@@ -1,6 +1,7 @@
 import envie
 import filepath
 import giolt/internal/config
+import giolt/internal/process
 import gleam/dynamic/decode
 import gleam/json
 import gleam/option.{type Option, None, Some}
@@ -173,7 +174,11 @@ pub fn describe_error(error: Error) -> String {
 }
 
 @external(javascript, "./ffi_credentials.mjs", "is_windows")
-fn is_windows() -> Bool
+fn is_windows() -> Bool {
+  panic as process.javascript_only
+}
 
 @external(javascript, "./ffi_credentials.mjs", "home_directory")
-fn home_directory() -> String
+fn home_directory() -> String {
+  panic as process.javascript_only
+}

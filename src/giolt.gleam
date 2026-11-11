@@ -1,21 +1,54 @@
 import argv
 import giolt/internal/cli
 import giolt/internal/commands
+import giolt/internal/effect.{type Effect}
 import giolt/internal/io
 import giolt/internal/process
+import giolt/internal/rerun
 import gleam/io as stdio
-import gleam/javascript/promise.{type Promise}
 
-pub fn main() -> Promise(Nil) {
-  case cli.parse(argv.load().arguments) {
-    cli.Usage(text) -> promise.resolve(stdio.println(text))
+pub fn main() -> Effect(Nil) {
+  let args = argv.load().arguments
+  case process.on_javascript() {
+    True -> run_cli(args)
+    False -> effect.resolve(rerun_on_javascript(args))
+  }
+}
+
+// Every command needs Node or Bun (subprocesses, fetch, the dev server), so
+// on Erlang giolt runs itself again on JavaScript.
+fn rerun_on_javascript(args: List(String)) -> Nil {
+  let runtime =
+    rerun.pick(
+      node: process.available("node", ["--version"]),
+      bun: process.available("bun", ["--version"]),
+    )
+  case runtime {
+    Error(error) -> {
+      io.println_error(rerun.describe_error(error))
+      process.exit(1)
+    }
+    Ok(runtime) ->
+      case process.run_attached("gleam", rerun.gleam_args(runtime, args)) {
+        Ok(status) -> process.exit(status)
+        Error(message) -> {
+          io.println_error(message)
+          process.exit(1)
+        }
+      }
+  }
+}
+
+fn run_cli(args: List(String)) -> Effect(Nil) {
+  case cli.parse(args) {
+    cli.Usage(text) -> effect.resolve(stdio.println(text))
     cli.Invalid(text) -> {
       stdio.println_error(text)
       process.exit(2)
-      promise.resolve(Nil)
+      effect.resolve(Nil)
     }
     cli.Run(command) -> {
-      use result <- promise.map(run(command))
+      use result <- effect.map(run(command))
       case result {
         Ok(Nil) -> Nil
         Error(message) -> {
@@ -27,7 +60,7 @@ pub fn main() -> Promise(Nil) {
   }
 }
 
-fn run(command: cli.Command) -> Promise(Result(Nil, String)) {
+fn run(command: cli.Command) -> Effect(Result(Nil, String)) {
   case command {
     cli.Build(config:) -> commands.build(config:)
     cli.Dev(config:) -> commands.dev(config:)
@@ -43,6 +76,6 @@ fn run(command: cli.Command) -> Promise(Result(Nil, String)) {
     cli.RenameProject(from:, to:) -> commands.rename_project(from:, to:)
     cli.DeleteProject(name:, yes:) -> commands.delete_project(name:, yes:)
     cli.ShowUsage(json:) -> commands.usage(json:)
-    cli.Help -> promise.resolve(Ok(stdio.println(cli.usage_text())))
+    cli.Help -> effect.resolve(Ok(stdio.println(cli.usage_text())))
   }
 }

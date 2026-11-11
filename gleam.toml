@@ -1,5 +1,5 @@
 name = "giolt"
-version = "0.7.0"
+version = "0.8.0"
 description = "Build, run and deploy Gleam apps on Giolt"
 internal_modules = ["giolt/internal", "giolt/internal/*"]
 target = "javascript"
@@ -13,11 +13,9 @@ links = [
 [dependencies]
 gleam_stdlib = ">= 1.0.0 and < 2.0.0"
 simplifile = ">= 2.7.0 and < 3.0.0"
-gleam_javascript = ">= 1.0.1 and < 2.0.0"
 filepath = ">= 1.1.2 and < 2.0.0"
 conversation = ">= 2.0.2 and < 3.0.0"
 gleam_regexp = ">= 1.1.1 and < 2.0.0"
-gleam_fetch = ">= 1.4.1 and < 2.0.0"
 gleam_json = ">= 3.1.0 and < 4.0.0"
 gleam_http = ">= 4.4.0 and < 5.0.0"
 envie = ">= 1.2.0 and < 2.0.0"

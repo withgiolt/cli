@@ -1,10 +1,11 @@
 import filepath
 import giolt/internal/config
+import giolt/internal/effect.{type Effect}
 import giolt/internal/esbuild
 import giolt/internal/esbuild_bin
 import giolt/internal/io
+import giolt/internal/process
 import giolt/internal/shim
-import gleam/javascript/promise.{type Promise}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -74,8 +75,8 @@ pub fn additional_args(
   Config(entry:, static_dir:, outdir:, additional_args: args)
 }
 
-pub fn run(config: Config(HasEntry)) -> Promise(Result(Output, Error)) {
-  use result <- promise.map(pipeline(config))
+pub fn run(config: Config(HasEntry)) -> Effect(Result(Output, Error)) {
+  use result <- effect.map(pipeline(config))
 
   case result {
     Ok(output) -> io.println_success("Bundled to " <> output.outdir)
@@ -85,7 +86,7 @@ pub fn run(config: Config(HasEntry)) -> Promise(Result(Output, Error)) {
   result
 }
 
-fn pipeline(config: Config(HasEntry)) -> Promise(Result(Output, Error)) {
+fn pipeline(config: Config(HasEntry)) -> Effect(Result(Output, Error)) {
   let prepared = {
     use _ <- result.try(check_entry(config.entry))
     use _ <- result.try(check_outdir(config.outdir, config.entry))
@@ -94,9 +95,9 @@ fn pipeline(config: Config(HasEntry)) -> Promise(Result(Output, Error)) {
   }
 
   case prepared {
-    Error(error) -> promise.resolve(Error(error))
+    Error(error) -> effect.resolve(Error(error))
     Ok(Nil) -> {
-      use bundled <- promise.map(run_esbuild(
+      use bundled <- effect.map(run_esbuild(
         config.outdir,
         config.additional_args,
       ))
@@ -179,17 +180,19 @@ fn write_shim(entry_path: String) -> Result(Nil, Error) {
 }
 
 @external(javascript, "./ffi_paths.mjs", "resolve_absolute")
-fn resolve_absolute(path: String) -> String
+fn resolve_absolute(_path: String) -> String {
+  panic as process.javascript_only
+}
 
 fn run_esbuild(
   outdir: String,
   additional_args: List(String),
-) -> Promise(Result(Nil, Error)) {
+) -> Effect(Result(Nil, Error)) {
   io.println_info("Bundling...")
 
-  use installed <- promise.await(esbuild_bin.ensure_installed())
+  use installed <- effect.await(esbuild_bin.ensure_installed())
   case installed {
-    Error(reason) -> promise.resolve(Error(EsbuildFailed(reason)))
+    Error(reason) -> effect.resolve(Error(EsbuildFailed(reason)))
     Ok(exe) -> {
       let plan =
         esbuild.Plan(
@@ -198,7 +201,7 @@ fn run_esbuild(
           additional_args:,
         )
 
-      use result <- promise.map(esbuild_bin.run(exe, esbuild.flags(plan)))
+      use result <- effect.map(esbuild_bin.run(exe, esbuild.flags(plan)))
       result.map_error(result, EsbuildFailed)
     }
   }

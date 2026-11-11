@@ -1,14 +1,15 @@
+import giolt/internal/effect.{type Effect}
+import giolt/internal/process
 import gleam/dynamic/decode.{type Decoder}
-import gleam/fetch
 import gleam/http.{type Method}
 import gleam/http/request.{type Request}
 import gleam/int
-import gleam/javascript/promise.{type Promise}
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import gleam/uri
 
 pub type Client {
   Client(api_url: String, token: String)
@@ -102,11 +103,11 @@ pub type Error {
 
 const slow_down_seconds = 5
 
-pub fn me(client: Client) -> Promise(Result(Me, Error)) {
+pub fn me(client: Client) -> Effect(Result(Me, Error)) {
   send_json(client.api_url, me_request(client), me_decoder())
 }
 
-pub fn list_projects(client: Client) -> Promise(Result(List(Project), Error)) {
+pub fn list_projects(client: Client) -> Effect(Result(List(Project), Error)) {
   send_json(
     client.api_url,
     list_projects_request(client),
@@ -117,19 +118,19 @@ pub fn list_projects(client: Client) -> Promise(Result(List(Project), Error)) {
 pub fn find_project(
   client: Client,
   slug: String,
-) -> Promise(Result(Project, Error)) {
-  use projects <- promise.try_await(send_json(
+) -> Effect(Result(Project, Error)) {
+  use projects <- effect.try_await(send_json(
     client.api_url,
     find_project_request(client, slug),
     list_decoder(project_decoder()),
   ))
-  promise.resolve(pick_project(projects, slug))
+  effect.resolve(pick_project(projects, slug))
 }
 
 pub fn create_project(
   client: Client,
   slug: String,
-) -> Promise(Result(Project, Error)) {
+) -> Effect(Result(Project, Error)) {
   send_json(
     client.api_url,
     create_project_request(client, slug),
@@ -141,7 +142,7 @@ pub fn rename_project(
   client: Client,
   id: Int,
   slug: String,
-) -> Promise(Result(Project, Error)) {
+) -> Effect(Result(Project, Error)) {
   send_json(
     client.api_url,
     rename_project_request(client, id, slug),
@@ -149,7 +150,7 @@ pub fn rename_project(
   )
 }
 
-pub fn delete_project(client: Client, id: Int) -> Promise(Result(Nil, Error)) {
+pub fn delete_project(client: Client, id: Int) -> Effect(Result(Nil, Error)) {
   send_empty(client.api_url, delete_project_request(client, id))
 }
 
@@ -157,7 +158,7 @@ pub fn create_deployment(
   client: Client,
   project_id: Int,
   body: Json,
-) -> Promise(Result(Deployed, Error)) {
+) -> Effect(Result(Deployed, Error)) {
   send_json(
     client.api_url,
     create_deployment_request(client, project_id, body),
@@ -165,17 +166,17 @@ pub fn create_deployment(
   )
 }
 
-pub fn usage(client: Client) -> Promise(Result(Usage, Error)) {
+pub fn usage(client: Client) -> Effect(Result(Usage, Error)) {
   send_json(client.api_url, usage_request(client), usage_decoder())
 }
 
-pub fn revoke_token(client: Client) -> Promise(Result(Nil, Error)) {
+pub fn revoke_token(client: Client) -> Effect(Result(Nil, Error)) {
   send_empty(client.api_url, revoke_token_request(client))
 }
 
 pub fn start_device_login(
   api_url: String,
-) -> Promise(Result(DeviceLogin, Error)) {
+) -> Effect(Result(DeviceLogin, Error)) {
   send_json(
     api_url,
     start_device_login_request(api_url),
@@ -187,8 +188,8 @@ pub fn poll_device_login(
   api_url: String,
   device_code: String,
   interval: Int,
-) -> Promise(PollStep) {
-  use sent <- promise.map(send(
+) -> Effect(PollStep) {
+  use sent <- effect.map(send(
     api_url,
     poll_device_login_request(api_url, device_code),
   ))
@@ -332,40 +333,47 @@ fn new_request(
 fn send(
   api_url: String,
   built: Result(Request(String), Error),
-) -> Promise(Result(#(Int, String), Error)) {
+) -> Effect(Result(#(Int, String), Error)) {
   case built {
-    Error(error) -> promise.resolve(Error(error))
+    Error(error) -> effect.resolve(Error(error))
     Ok(req) -> {
-      use sent <- promise.await(fetch.send(req))
+      let method = string.uppercase(http.method_to_string(req.method))
+      let url = uri.to_string(request.to_uri(req))
+      use sent <- effect.map(transmit(req, method, url))
       case sent {
-        Error(_) -> promise.resolve(Error(Unreachable(api_url)))
-        Ok(res) -> {
-          use read <- promise.map(fetch.read_text_body(res))
-          case read {
-            Ok(res) -> Ok(#(res.status, res.body))
-            Error(_) -> Error(UnexpectedResponse(status: res.status, body: ""))
-          }
-        }
+        Error(Nil) -> Error(Unreachable(api_url))
+        Ok(#(status, Ok(body))) -> Ok(#(status, body))
+        Ok(#(status, Error(Nil))) ->
+          Error(UnexpectedResponse(status:, body: ""))
       }
     }
   }
+}
+
+@external(javascript, "./ffi_api.mjs", "transmit")
+fn transmit(
+  _req: Request(String),
+  _method: String,
+  _url: String,
+) -> Effect(Result(#(Int, Result(String, Nil)), Nil)) {
+  panic as process.javascript_only
 }
 
 fn send_json(
   api_url: String,
   built: Result(Request(String), Error),
   decoder: Decoder(a),
-) -> Promise(Result(a, Error)) {
-  use #(status, body) <- promise.try_await(send(api_url, built))
-  promise.resolve(parse_json(status, body, decoder))
+) -> Effect(Result(a, Error)) {
+  use #(status, body) <- effect.try_await(send(api_url, built))
+  effect.resolve(parse_json(status, body, decoder))
 }
 
 fn send_empty(
   api_url: String,
   built: Result(Request(String), Error),
-) -> Promise(Result(Nil, Error)) {
-  use #(status, body) <- promise.try_await(send(api_url, built))
-  promise.resolve(parse_empty(status, body))
+) -> Effect(Result(Nil, Error)) {
+  use #(status, body) <- effect.try_await(send(api_url, built))
+  effect.resolve(parse_empty(status, body))
 }
 
 pub fn parse_json(

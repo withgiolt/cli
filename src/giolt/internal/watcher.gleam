@@ -1,7 +1,10 @@
-import gleam/javascript/promise.{type Promise}
+import giolt/internal/effect.{type Effect}
+import giolt/internal/process
 
 @external(javascript, "./ffi_watcher.mjs", "watch")
 pub fn watch(
-  paths paths: List(String),
-  on_change on_change: fn(List(String)) -> Promise(Nil),
-) -> fn() -> Nil
+  paths _paths: List(String),
+  on_change _on_change: fn(List(String)) -> Effect(Nil),
+) -> fn() -> Nil {
+  panic as process.javascript_only
+}

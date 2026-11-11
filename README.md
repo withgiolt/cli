@@ -23,6 +23,11 @@ gleam run -m giolt build
 gleam run --runtime bun -m giolt build
 ```
 
+The CLI runs on JavaScript. In an Erlang-target project, `gleam run -m giolt`
+starts on Erlang and runs itself again as `gleam run --target javascript`, with
+Node when it is installed and otherwise Bun. When neither is installed, it
+stops and says so.
+
 Your entry module exports one function named `handle`:
 
 ```gleam
@@ -41,7 +46,7 @@ and fails with the expected and found types when it does not match.
 | Command | Does |
 | --- | --- |
 | `giolt build [--config FILE]` | Checks `handle`, compiles and bundles into `outdir` |
-| `giolt dev [--config FILE]` | Builds, watches `watch`, serves on `port` and reloads on change (JavaScript target) |
+| `giolt dev [--config FILE]` | Builds, watches `watch`, serves on `port` and reloads on change |
 | `giolt deploy [--preview] [--artifact DIR] [--project NAME] [--config FILE]` | Builds, then uploads `outdir` to Giolt. With `artifact`, uploads that directory instead |
 | `giolt link NAME [--config FILE]` | Writes `project = <id>` under `[tools.giolt]`, so `deploy` needs no flags. Commit the file so CI deploys there too |
 | `giolt unlink [--config FILE]` | Removes that `project` line |
@@ -143,7 +148,8 @@ in your project and build again.
 When the app reaches a function afterglow does not provide, such as
 `crypto:mac/4`, `giolt build` lists it and still builds. A request that calls
 one gets a 500 whose body names the function. `deploy` uploads the output the
-same way as a JavaScript build. `dev` does not support this target yet.
+same way as a JavaScript build. `dev` runs the same build and serves `app.wasm`
+through `host.mjs`, rebuilding on every change; each rebuild takes a few seconds.
 
 ## Issues
 

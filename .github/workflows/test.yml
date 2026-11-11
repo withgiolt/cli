@@ -90,7 +90,7 @@ jobs:
           EOF
           echo "static asset" > "$app/public/hello.txt"
           cd "$app"
-          gleam run --target javascript -m giolt build
+          gleam run -m giolt build
 
       - name: Check the output
         working-directory: ${{ runner.temp }}/erl_app/dist

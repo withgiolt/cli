@@ -1,5 +1,6 @@
+import giolt/internal/effect
+import giolt/internal/process
 import giolt/internal/watcher
-import gleam/javascript/promise
 import gleam/list
 import gleam/string
 import simplifile
@@ -7,10 +8,10 @@ import simplifile
 fn record_to(
   log: String,
   hold_ms: Int,
-) -> fn(List(String)) -> promise.Promise(Nil) {
+) -> fn(List(String)) -> effect.Effect(Nil) {
   fn(paths) {
     let assert Ok(_) = simplifile.append(log, string.join(paths, ",") <> "\n")
-    promise.wait(hold_ms)
+    process.sleep(hold_ms)
   }
 }
 
@@ -29,11 +30,11 @@ fn fresh(dir: String) -> String {
   log
 }
 
-fn until(check: fn() -> Bool, tries: Int) -> promise.Promise(Nil) {
+fn until(check: fn() -> Bool, tries: Int) -> effect.Effect(Nil) {
   case check() || tries == 0 {
-    True -> promise.resolve(Nil)
+    True -> effect.resolve(Nil)
     False -> {
-      use _ <- promise.await(promise.wait(50))
+      use _ <- effect.await(process.sleep(50))
       until(check, tries - 1)
     }
   }
@@ -54,12 +55,12 @@ pub fn files_saved_together_arrive_as_one_batch_test() {
   let log = fresh(dir)
 
   // Node on macOS reports a directory created just before the watcher starts.
-  use _ <- promise.await(promise.wait(300))
+  use _ <- effect.await(process.sleep(300))
   let stop = watcher.watch([dir], record_to(log, 0))
-  use _ <- promise.await(promise.wait(150))
+  use _ <- effect.await(process.sleep(150))
   let assert Ok(_) = simplifile.write(dir <> "/a.txt", "a")
   let assert Ok(_) = simplifile.write(dir <> "/b.txt", "b")
-  use _ <- promise.map(until(mentions(log, "b.txt"), 60))
+  use _ <- effect.map(until(mentions(log, "b.txt"), 60))
 
   stop()
   let seen = calls(log)
@@ -74,15 +75,15 @@ pub fn changes_during_a_slow_run_become_one_follow_up_test() {
   let dir = "./test_tmp_watch_followup"
   let log = fresh(dir)
 
-  use _ <- promise.await(promise.wait(300))
+  use _ <- effect.await(process.sleep(300))
   let stop = watcher.watch([dir], record_to(log, 400))
-  use _ <- promise.await(promise.wait(150))
+  use _ <- effect.await(process.sleep(150))
   let assert Ok(_) = simplifile.write(dir <> "/a.txt", "a")
-  use _ <- promise.await(until(mentions(log, "a.txt"), 60))
+  use _ <- effect.await(until(mentions(log, "a.txt"), 60))
   let assert Ok(_) = simplifile.write(dir <> "/b.txt", "b")
   let assert Ok(_) = simplifile.write(dir <> "/c.txt", "c")
-  use _ <- promise.await(until(mentions(log, "c.txt"), 60))
-  use _ <- promise.map(promise.wait(600))
+  use _ <- effect.await(until(mentions(log, "c.txt"), 60))
+  use _ <- effect.map(process.sleep(600))
 
   stop()
   let seen = calls(log)
@@ -101,12 +102,12 @@ pub fn stopping_the_watcher_ends_the_calls_test() {
   let dir = "./test_tmp_watch_stop"
   let log = fresh(dir)
 
-  use _ <- promise.await(promise.wait(300))
+  use _ <- effect.await(process.sleep(300))
   let stop = watcher.watch([dir], record_to(log, 0))
-  use _ <- promise.await(promise.wait(150))
+  use _ <- effect.await(process.sleep(150))
   stop()
   let assert Ok(_) = simplifile.write(dir <> "/a.txt", "a")
-  use _ <- promise.map(promise.wait(400))
+  use _ <- effect.map(process.sleep(400))
 
   let seen = calls(log)
   clean(dir, log)

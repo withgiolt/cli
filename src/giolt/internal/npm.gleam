@@ -1,5 +1,6 @@
 import filepath
-import gleam/javascript/promise.{type Promise}
+import giolt/internal/effect.{type Effect}
+import giolt/internal/process
 import gleam/list
 import simplifile
 
@@ -11,7 +12,9 @@ pub fn installed(directory: String, files: List(String)) -> Bool {
 
 @external(javascript, "./ffi_npm.mjs", "install")
 pub fn install(
-  url: String,
-  directory: String,
-  files: List(String),
-) -> Promise(Result(Nil, String))
+  _url: String,
+  _directory: String,
+  _files: List(String),
+) -> Effect(Result(Nil, String)) {
+  panic as process.javascript_only
+}
