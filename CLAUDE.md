@@ -4,7 +4,8 @@ The `giolt` CLI: builds, runs and deploys Gleam apps on the Giolt platform.
 Consumers run `gleam run -m giolt <command>` (`build`, `dev`, `deploy`) and
 configure it under `[tools.giolt]` in their own `gleam.toml`. The CLI itself
 is a JavaScript-target package that runs on Node or Bun; it builds consumer projects for
-either target. It was `giolt_sdk` until 3.0.1, now retired on Hex.
+either target. Under an Erlang-target project, `main` re-runs the CLI on
+JavaScript (`internal/rerun.gleam`). It was `giolt_sdk` until 3.0.1, now retired on Hex.
 
 ## Settings
 
@@ -56,6 +57,7 @@ One file per kind of code that shows how this repo does it. Copy its shape when 
 | a pure decision function with its test | src/giolt/internal/signature.gleam, test/signature_test.gleam |
 | a CLI command | src/giolt/internal/commands.gleam, src/giolt/internal/cli.gleam |
 | an FFI file | src/giolt/internal/ffi_process.mjs |
+| an Erlang FFI file (only what the re-run needs; other externals get a `panic as process.javascript_only` body) | src/giolt/internal/giolt_ffi_process.erl |
 
 ## Enforced rules
 
@@ -86,15 +88,16 @@ from a pure function in `src/giolt/internal/`, each with a matching
 | `bundle.gleam` | Bundling the compiled entry into `outdir` with the worker shim, plus static assets |
 | `deploy.gleam` | Choosing the deploy's project and token (`route`), then posting the deploy to the Giolt API |
 | `link.gleam` | Setting and removing `project` under `[tools.giolt]` as a text edit |
-| `effect.gleam` + `ffi_effect.mjs` + `giolt_ffi_effect.erl` | `Effect(a)`, the command flow's result: a Promise on JavaScript, the plain value on Erlang |
-| `api.gleam` + `ffi_api.mjs` + `giolt_ffi_api.erl` | The `/api/v1` client (sent with fetch on JavaScript, gleam_httpc on Erlang): requests, response and error decoding, the device-login poll step, what a failed revoke means, which login URLs may be opened |
+| `rerun.gleam` | On Erlang: picking Node or Bun and the `gleam run --target javascript` arguments that re-run the CLI there |
+| `effect.gleam` + `ffi_effect.mjs` + `giolt_ffi_effect.erl` | `Effect(a)`, the command flow's result: a Promise on JavaScript, the plain value on Erlang, so the package compiles for an Erlang-target consumer |
+| `api.gleam` + `ffi_api.mjs` | The `/api/v1` client: requests, response and error decoding, the device-login poll step, what a failed revoke means, which login URLs may be opened |
 | `credentials.gleam` + `ffi_credentials.mjs` | Where `credentials.json` lives, reading and writing it, and choosing between it and `GIOLT_TOKEN` |
 | `confirm.gleam` | Whether `projects delete` proceeds, asks you to type the name, or refuses |
 | `shim.gleam` | The worker entry template esbuild bundles |
 | `server.gleam` + `ffi_server.mjs` | The dev HTTP server (assets, worker hot reload, live-reload SSE) |
 | `static_path.gleam` | Percent-decoding a dev server request path, refusing malformed and NUL-byte paths |
 | `watcher.gleam` + `ffi_watcher.mjs` | Recursive file watching |
-| `process.gleam` + `ffi_process.mjs` | Running subprocesses and shell hooks, capturing a command's output, probing tools, reading a line from stdin, opening a URL, sleeping, exiting |
+| `process.gleam` + `ffi_process.mjs` + `giolt_ffi_process.erl` | Running subprocesses and shell hooks, capturing a command's output, probing tools, reading a line from stdin, opening a URL, sleeping, exiting |
 | `io.gleam` | Styled output and the glitzer progress line |
 | `esgleam/` | Vendored (Apache-2.0, forked) esbuild platform detection and tarball extraction only; do not add unrelated code here |
 
@@ -151,7 +154,9 @@ only reads, writes and calls it.
   `PUBLIC_`/`PRIVATE_` inlining.
 - **No glob or ignore matching in `dev`.** `watch` takes directories.
 - **Node 20+ and Bun are the supported runtimes** (`gleam run -m giolt` and
-  `gleam run --runtime bun -m giolt`); Deno is not supported. Node 20 is the
+  `gleam run --runtime bun -m giolt`); Deno is not supported. On Erlang the
+  CLI only re-runs itself on JavaScript; don't port commands to the BEAM.
+  Erlang module names are global, so Erlang FFI files are named `giolt_ffi_*.erl`. Node 20 is the
   floor because `fs.watch` is only recursive on Linux from there. The Erlang
   target's output is only `app.wasm`, `index.mjs`, `host.mjs` and `static/`.
 - **Comments are minimal.** Almost no doc comments in `src/`. Let names and

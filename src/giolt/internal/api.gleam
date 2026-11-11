@@ -1,4 +1,5 @@
 import giolt/internal/effect.{type Effect}
+import giolt/internal/process
 import gleam/dynamic/decode.{type Decoder}
 import gleam/http.{type Method}
 import gleam/http/request.{type Request}
@@ -349,15 +350,14 @@ fn send(
   }
 }
 
-// Erlang sends `req` with httpc; JavaScript sends `method` and `url` with
-// fetch, since a gleam_http Request has no plain JavaScript shape.
-@external(erlang, "giolt_ffi_api", "transmit")
 @external(javascript, "./ffi_api.mjs", "transmit")
 fn transmit(
-  req: Request(String),
-  method: String,
-  url: String,
-) -> Effect(Result(#(Int, Result(String, Nil)), Nil))
+  _req: Request(String),
+  _method: String,
+  _url: String,
+) -> Effect(Result(#(Int, Result(String, Nil)), Nil)) {
+  panic as process.javascript_only
+}
 
 fn send_json(
   api_url: String,

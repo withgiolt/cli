@@ -3,6 +3,7 @@ import giolt/internal/esbuild
 import giolt/internal/esgleam/esgleam/mod/platform
 import giolt/internal/io
 import giolt/internal/npm
+import giolt/internal/process
 import gleam/result
 
 pub fn ensure_installed() -> Effect(Result(String, String)) {
@@ -26,4 +27,6 @@ pub fn run(exe: String, args: List(String)) -> Effect(Result(Nil, String)) {
 }
 
 @external(javascript, "./ffi_esbuild.mjs", "exec")
-fn exec(command: String, args: List(String)) -> Effect(Result(Nil, String))
+fn exec(_command: String, _args: List(String)) -> Effect(Result(Nil, String)) {
+  panic as process.javascript_only
+}

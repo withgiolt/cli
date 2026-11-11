@@ -4,6 +4,7 @@ import giolt/internal/effect.{type Effect}
 import giolt/internal/esbuild
 import giolt/internal/esbuild_bin
 import giolt/internal/io
+import giolt/internal/process
 import giolt/internal/shim
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -179,7 +180,9 @@ fn write_shim(entry_path: String) -> Result(Nil, Error) {
 }
 
 @external(javascript, "./ffi_paths.mjs", "resolve_absolute")
-fn resolve_absolute(path: String) -> String
+fn resolve_absolute(_path: String) -> String {
+  panic as process.javascript_only
+}
 
 fn run_esbuild(
   outdir: String,

@@ -23,6 +23,11 @@ gleam run -m giolt build
 gleam run --runtime bun -m giolt build
 ```
 
+The CLI runs on JavaScript. In an Erlang-target project, `gleam run -m giolt`
+starts on Erlang and runs itself again as `gleam run --target javascript`, with
+Node when it is installed and otherwise Bun. When neither is installed, it
+stops and says so.
+
 Your entry module exports one function named `handle`:
 
 ```gleam

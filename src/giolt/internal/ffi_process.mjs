@@ -57,6 +57,10 @@ export function output(directory, command, args) {
   });
 }
 
+export function on_javascript() {
+  return true;
+}
+
 export function runtime_path() {
   return process.execPath;
 }

@@ -268,4 +268,6 @@ fn locked_versions(
 }
 
 @external(javascript, "./ffi_afterglow.mjs", "make_executable")
-fn chmod_executable(path: String) -> Effect(Result(Nil, String))
+fn chmod_executable(_path: String) -> Effect(Result(Nil, String)) {
+  panic as process.javascript_only
+}

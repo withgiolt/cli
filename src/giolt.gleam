@@ -4,10 +4,43 @@ import giolt/internal/commands
 import giolt/internal/effect.{type Effect}
 import giolt/internal/io
 import giolt/internal/process
+import giolt/internal/rerun
 import gleam/io as stdio
 
 pub fn main() -> Effect(Nil) {
-  case cli.parse(argv.load().arguments) {
+  let args = argv.load().arguments
+  case process.on_javascript() {
+    True -> run_cli(args)
+    False -> effect.resolve(rerun_on_javascript(args))
+  }
+}
+
+// Every command needs Node or Bun (subprocesses, fetch, the dev server), so
+// on Erlang giolt runs itself again on JavaScript.
+fn rerun_on_javascript(args: List(String)) -> Nil {
+  let runtime =
+    rerun.pick(
+      node: process.available("node", ["--version"]),
+      bun: process.available("bun", ["--version"]),
+    )
+  case runtime {
+    Error(error) -> {
+      io.println_error(rerun.describe_error(error))
+      process.exit(1)
+    }
+    Ok(runtime) ->
+      case process.run_attached("gleam", rerun.gleam_args(runtime, args)) {
+        Ok(status) -> process.exit(status)
+        Error(message) -> {
+          io.println_error(message)
+          process.exit(1)
+        }
+      }
+  }
+}
+
+fn run_cli(args: List(String)) -> Effect(Nil) {
+  case cli.parse(args) {
     cli.Usage(text) -> effect.resolve(stdio.println(text))
     cli.Invalid(text) -> {
       stdio.println_error(text)

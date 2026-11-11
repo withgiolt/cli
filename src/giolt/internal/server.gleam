@@ -1,3 +1,4 @@
+import giolt/internal/process
 import gleam/option.{type Option}
 
 pub fn serve(
@@ -12,12 +13,16 @@ pub fn serve(
 
 @external(javascript, "./ffi_server.mjs", "serve")
 fn do_serve(
-  port: Int,
-  static_dir: String,
-  worker_path: String,
-  live_reload: Bool,
-  spa: Bool,
-) -> Nil
+  _port: Int,
+  _static_dir: String,
+  _worker_path: String,
+  _live_reload: Bool,
+  _spa: Bool,
+) -> Nil {
+  panic as process.javascript_only
+}
 
 @external(javascript, "./ffi_server.mjs", "notify_reload")
-pub fn notify_reload() -> Nil
+pub fn notify_reload() -> Nil {
+  panic as process.javascript_only
+}

@@ -21,10 +21,14 @@ pub type Arch {
 }
 
 @external(javascript, "../../ffi_esgleam.mjs", "get_os")
-pub fn get_os() -> Result(OsName, Nil)
+pub fn get_os() -> Result(OsName, Nil) {
+  panic as "giolt runs on JavaScript only."
+}
 
 @external(javascript, "../../ffi_esgleam.mjs", "get_arch")
-pub fn get_arch() -> Result(Arch, Nil)
+pub fn get_arch() -> Result(Arch, Nil) {
+  panic as "giolt runs on JavaScript only."
+}
 
 pub fn get_package_name() {
   let assert Ok(os) = get_os()
