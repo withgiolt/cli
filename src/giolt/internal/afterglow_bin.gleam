@@ -79,6 +79,7 @@ pub fn check_tooling() -> Result(Nil, String) {
 
 fn generate_package(config: Config) -> Result(Nil, String) {
   use locked <- result.try(locked_versions(config.dependencies))
+  use _ <- result.try(afterglow.check_locked_runtime(locked))
   let files = [
     #(
       "gleam.toml",

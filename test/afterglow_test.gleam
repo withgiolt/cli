@@ -254,3 +254,24 @@ pub fn binaryen_comes_from_its_versioned_npm_tarball_test() {
 pub fn the_worker_is_afterglows_entry_and_host_test() {
   assert afterglow.worker_files == ["index.mjs", "host.mjs"]
 }
+
+// The build package pins whatever afterglow the user's manifest locks, so a
+// lock on an older afterglow would skip the minimum the CLI needs and fail
+// later, copying files that release doesn't have.
+pub fn a_locked_afterglow_older_than_0_2_is_refused_test() {
+  let assert Error(message) =
+    afterglow.check_locked_runtime([#("afterglow", "0.1.1"), #("wisp", "2.2.2")])
+  assert string.contains(message, "0.1.1")
+  assert string.contains(message, "gleam update afterglow")
+}
+
+pub fn a_locked_afterglow_from_1_0_is_refused_test() {
+  let assert Error(_) =
+    afterglow.check_locked_runtime([#("afterglow", "1.0.0")])
+}
+
+pub fn a_supported_or_absent_afterglow_lock_passes_test() {
+  assert afterglow.check_locked_runtime([#("afterglow", "0.2.0")]) == Ok(Nil)
+  assert afterglow.check_locked_runtime([#("afterglow", "0.13.4")]) == Ok(Nil)
+  assert afterglow.check_locked_runtime([#("wisp", "2.2.2")]) == Ok(Nil)
+}
