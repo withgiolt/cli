@@ -49,12 +49,18 @@ jobs:
   # host.mjs afterglow ships, the way its index.mjs does on a Worker.
   erlang-build:
     runs-on: ubuntu-latest
+    # afterglow also compiles the OTP stdlib, so each OTP it supports gets a build.
+    strategy:
+      fail-fast: false
+      matrix:
+        otp: ["28", "29"]
+    name: erlang-build (OTP ${{ matrix.otp }})
     steps:
       - uses: actions/checkout@v4
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "28"
+          otp-version: ${{ matrix.otp }}
           gleam-version: "1.19"
           rebar3-version: "3.27"
 
