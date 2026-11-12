@@ -134,8 +134,8 @@ the file leaves out take their defaults):
 
 A project with `target = "erlang"` builds with
 [afterglow](https://github.com/withgiolt/afterglow), which compiles the app's
-BEAM bytecode to WebAssembly. You need Erlang/OTP and rebar3 installed, and
-`giolt build` tells you which one is missing. The first build downloads
+BEAM bytecode to WebAssembly. You need Erlang/OTP 28 or 29 and rebar3
+installed, and `giolt build` tells you which one is missing. The first build downloads
 Binaryen from npm into `build/dev/bin`. The output in `outdir` is `app.wasm`
 and afterglow's Worker entry, `index.mjs` and `host.mjs`, plus `static/` when
 `assets` is set. It needs afterglow 0.2.0 or later. afterglow runs on Linux and
