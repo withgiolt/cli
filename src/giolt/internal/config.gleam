@@ -28,6 +28,7 @@ pub type Config {
     prebuild: Option(String),
     artifact: Option(String),
     project: Option(Int),
+    env: List(String),
     dependencies: List(String),
   )
 }
@@ -41,6 +42,7 @@ pub type Error {
   InvalidPort(Int)
   SpaWithoutArtifact
   InvalidValue(key: String, expected: String)
+  InvalidEnvName(name: String)
 }
 
 pub const default_outdir = "./dist"
@@ -63,6 +65,7 @@ pub fn default(package: String, target: Target) -> Config {
     prebuild: None,
     artifact: None,
     project: None,
+    env: [],
     dependencies: [],
   )
 }
@@ -168,6 +171,7 @@ pub fn parse_with(
     tom.as_int,
     "a project id, set by `giolt link`",
   ))
+  use env <- result.try(read_env(toml))
   use watch <- result.try(with_default(
     toml,
     "watch",
@@ -191,8 +195,33 @@ pub fn parse_with(
     prebuild:,
     artifact:,
     project:,
+    env:,
     dependencies:,
   ))
+}
+
+// The environment variables the app declares, which are the only ones a
+// deploy hands it. The platform refuses a malformed name too, but only after
+// the build, so it is caught here first.
+fn read_env(toml) -> Result(List(String), Error) {
+  use names <- result.try(
+    with_default(toml, "env", strings, "a list of variable names", []),
+  )
+  use _ <- result.map(
+    list.try_each(names, fn(name) {
+      case is_env_name(name) {
+        True -> Ok(Nil)
+        False -> Error(InvalidEnvName(name))
+      }
+    }),
+  )
+  list.unique(names)
+}
+
+pub fn is_env_name(name: String) -> Bool {
+  let assert Ok(pattern) = regexp.from_string("^[A-Z_][A-Z0-9_]{0,63}$")
+
+  regexp.check(pattern, name) && !string.starts_with(name, "GIOLT_")
 }
 
 fn read_dependencies(root) -> Result(List(String), Error) {
@@ -352,5 +381,11 @@ pub fn describe_error(error: Error) -> String {
       <> "(or pass --artifact to `giolt deploy`), or remove `spa`."
     InvalidValue(key:, expected:) ->
       "`" <> key <> "` must be " <> expected <> "."
+    InvalidEnvName(name) ->
+      "`"
+      <> name
+      <> "` in `env` is not a variable name. Use upper-case letters, digits "
+      <> "and underscores, start with a letter or underscore, and don't start "
+      <> "with GIOLT_."
   }
 }

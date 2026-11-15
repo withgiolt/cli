@@ -76,6 +76,11 @@ fn run(command: cli.Command) -> Effect(Result(Nil, String)) {
     cli.RenameProject(from:, to:) -> commands.rename_project(from:, to:)
     cli.DeleteProject(name:, yes:) -> commands.delete_project(name:, yes:)
     cli.ShowUsage(json:) -> commands.usage(json:)
+    cli.ListEnv(project:, config:) -> commands.list_env(project:, config:)
+    cli.SetEnv(name:, secret:, project:, config:) ->
+      commands.set_env(name:, secret:, project:, config:)
+    cli.RemoveEnv(name:, project:, config:) ->
+      commands.remove_env(name:, project:, config:)
     cli.Help -> effect.resolve(Ok(stdio.println(cli.usage_text())))
   }
 }

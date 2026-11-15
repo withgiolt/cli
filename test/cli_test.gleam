@@ -270,3 +270,32 @@ pub fn command_usage_still_lists_help_test() {
 
   assert string.contains(text, "--help")
 }
+
+pub fn env_subcommands_are_recognised_test() {
+  assert cli.parse(["env"]) == Run(cli.ListEnv(project: None, config: None))
+  assert cli.parse(["env", "--project", "blog"])
+    == Run(cli.ListEnv(project: Some("blog"), config: None))
+  assert cli.parse(["env", "set", "API_KEY", "--secret"])
+    == Run(cli.SetEnv(
+      name: "API_KEY",
+      secret: True,
+      project: None,
+      config: None,
+    ))
+  assert cli.parse(["env", "set", "REGION", "--project", "blog"])
+    == Run(cli.SetEnv(
+      name: "REGION",
+      secret: False,
+      project: Some("blog"),
+      config: None,
+    ))
+  assert cli.parse(["env", "rm", "REGION"])
+    == Run(cli.RemoveEnv(name: "REGION", project: None, config: None))
+}
+
+// A value is read from standard input, so one on the command line is refused
+// rather than taken: it would sit in shell history.
+pub fn env_set_takes_no_value_argument_test() {
+  let assert Invalid(_) = cli.parse(["env", "set", "API_KEY", "s3cret"])
+  let assert Invalid(_) = cli.parse(["env", "set"])
+}

@@ -97,6 +97,11 @@ only reads, writes and calls it.
   to `deploy.route` and, for the account commands, `credentials.resolve`. `XDG_CONFIG_HOME` and
   `APPDATA` only locate `credentials.json`. No `.env` loading, no
   `PUBLIC_`/`PRIVATE_` inlining.
+- **Environment variable values never touch the project or the command line.**
+  `env` under `[tools.giolt]` holds names only, which `deploy` sends so the
+  platform hands the app exactly those. `giolt env set` reads the value from
+  standard input and sends it in the request body. The env commands read
+  `project` from `gleam.toml` but, like every account command, never `api_url`.
 - **No glob or ignore matching in `dev`.** `watch` takes directories.
 - **Node 20+ and Bun are the supported runtimes** (`gleam run -m giolt` and
   `gleam run --runtime bun -m giolt`); Deno is not supported. On Erlang the

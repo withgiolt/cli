@@ -98,8 +98,8 @@ pbpaste | gleam run -m giolt login --token -
 Logging in again revokes the token it replaces.
 
 `GIOLT_TOKEN` takes precedence over the stored token, so CI can set it without
-logging in. Account commands never read `gleam.toml`, so a project's `api_url` cannot send
-your token elsewhere:
+logging in. Account commands never read `api_url` from `gleam.toml`, so a
+project cannot send your token elsewhere:
 
 - `giolt login` uses `GIOLT_API_URL`, or `https://dash.giolt.com` when that is
   unset, and stores that URL with the token.
@@ -107,6 +107,40 @@ your token elsewhere:
 - `GIOLT_TOKEN` is sent to `GIOLT_API_URL`, or `https://dash.giolt.com`.
 
 `giolt logout` only removes the stored token; it does not unset `GIOLT_TOKEN`.
+
+## Environment variables
+
+A project's variables and secrets are stored on Giolt, not in the repository.
+The app declares the ones it reads, and a deploy hands it exactly those:
+
+```toml
+[tools.giolt]
+env = ["DATABASE_URL", "API_KEY"]
+```
+
+| Command | Does |
+| --- | --- |
+| `giolt env` | Lists the project's variables. A secret is listed by name only |
+| `giolt env set NAME [--secret]` | Sets a variable, reading its value from standard input so it stays out of shell history. `--secret` means the value is never shown again |
+| `giolt env rm NAME` | Removes a variable |
+
+```sh
+gleam run -m giolt env set DATABASE_URL --secret < database-url.txt
+```
+
+Each command acts on the linked project, or on `--project NAME`, and needs a
+token with the `projects:read` scope to list and `projects:write` to change.
+The value is one line; set a multi-line value on the dashboard.
+
+A change reaches the app on the next deploy. `giolt deploy` is refused when
+`env` names a variable the project doesn't have, and the previous version
+keeps serving. A name is upper-case letters, digits and underscores, doesn't
+start with a digit or with `GIOLT_`, and is at most 64 characters.
+
+In a deployed JavaScript-target app each declared variable is a string
+property of the object under `globalThis[Symbol.for("giolt.platform")]`. An
+Erlang-target app reads it with `os:getenv/1`. There is
+no typed accessor yet, and `giolt dev` does not provide the variables.
 
 ## Configuration
 
@@ -129,6 +163,7 @@ the file leaves out take their defaults):
 | `prebuild` | none | Shell command run before every build, such as `gleam run -m docs/build` |
 | `artifact` | none | Deploy this directory as a static site. Skips the `handle` check, the compile and the bundle |
 | `project` | none | Id of the project `deploy` uploads to. Set by `giolt link` |
+| `env` | `[]` | Names of the environment variables the app reads. A deploy hands the app exactly these |
 
 ## Erlang target
 

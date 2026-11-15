@@ -29,6 +29,11 @@ pub type Deployment {
   Deployment(url: String, status: String)
 }
 
+// `value` is absent for a secret: the API never returns one.
+pub type EnvVar {
+  EnvVar(name: String, secret: Bool, value: Option(String))
+}
+
 pub type Deployed {
   Deployed(id: String, url: String, preview: Bool)
 }
@@ -166,6 +171,38 @@ pub fn create_deployment(
   )
 }
 
+pub fn list_env(
+  client: Client,
+  project_id: Int,
+) -> Effect(Result(List(EnvVar), Error)) {
+  send_json(
+    client.api_url,
+    list_env_request(client, project_id),
+    list_decoder(env_var_decoder()),
+  )
+}
+
+pub fn set_env(
+  client: Client,
+  project_id: Int,
+  name name: String,
+  value value: String,
+  secret secret: Bool,
+) -> Effect(Result(Nil, Error)) {
+  send_empty(
+    client.api_url,
+    set_env_request(client, project_id, name:, value:, secret:),
+  )
+}
+
+pub fn delete_env(
+  client: Client,
+  project_id: Int,
+  name: String,
+) -> Effect(Result(Nil, Error)) {
+  send_empty(client.api_url, delete_env_request(client, project_id, name))
+}
+
 pub fn usage(client: Client) -> Effect(Result(Usage, Error)) {
   send_json(client.api_url, usage_request(client), usage_decoder())
 }
@@ -248,6 +285,47 @@ pub fn create_deployment_request(
     project_path(project_id) <> "/deployments",
     Some(body),
   )
+}
+
+pub fn list_env_request(
+  client: Client,
+  project_id: Int,
+) -> Result(Request(String), Error) {
+  build(client, http.Get, project_path(project_id) <> "/env", None)
+}
+
+// The value travels in the body, never in the URL, so it stays out of
+// request logs.
+pub fn set_env_request(
+  client: Client,
+  project_id: Int,
+  name name: String,
+  value value: String,
+  secret secret: Bool,
+) -> Result(Request(String), Error) {
+  build(
+    client,
+    http.Put,
+    env_path(project_id, name),
+    Some(
+      json.object([
+        #("value", json.string(value)),
+        #("secret", json.bool(secret)),
+      ]),
+    ),
+  )
+}
+
+pub fn delete_env_request(
+  client: Client,
+  project_id: Int,
+  name: String,
+) -> Result(Request(String), Error) {
+  build(client, http.Delete, env_path(project_id, name), None)
+}
+
+fn env_path(project_id: Int, name: String) -> String {
+  project_path(project_id) <> "/env/" <> uri.percent_encode(name)
 }
 
 pub fn usage_request(client: Client) -> Result(Request(String), Error) {
@@ -450,6 +528,30 @@ fn deployment_decoder() -> Decoder(Deployment) {
   use url <- decode.field("url", decode.string)
   use status <- decode.field("status", decode.string)
   decode.success(Deployment(url:, status:))
+}
+
+pub fn env_var_decoder() -> Decoder(EnvVar) {
+  use name <- decode.field("name", decode.string)
+  use secret <- decode.field("secret", decode.bool)
+  use value <- decode.field("value", decode.optional(decode.string))
+  decode.success(EnvVar(name:, secret:, value:))
+}
+
+pub fn describe_env(vars: List(EnvVar)) -> List(String) {
+  let width =
+    list.fold(vars, 0, fn(width, var) {
+      int.max(width, string.length(var.name))
+    })
+
+  list.map(vars, fn(var) {
+    string.pad_end(var.name, width, " ")
+    <> "  "
+    <> case var.secret, var.value {
+      True, _ -> "(secret)"
+      False, Some(value) -> value
+      False, None -> "(unreadable, set it again)"
+    }
+  })
 }
 
 pub fn deployed_decoder() -> Decoder(Deployed) {
