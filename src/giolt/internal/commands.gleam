@@ -89,6 +89,7 @@ fn build_then_submit(
     artifact
     |> deploy.preview(preview)
     |> deploy.spa(config.spa)
+    |> deploy.env(config.env)
 
   // A missing token or unknown project is knowable up front; don't make the
   // user wait for a build.
@@ -731,6 +732,105 @@ pub fn usage(json json: Bool) -> Effect(Result(Nil, String)) {
   case json {
     True -> stdio.println(api.usage_json(usage))
     False -> list.each(api.describe_usage(usage), stdio.println)
+  }
+}
+
+pub fn list_env(
+  project project: Option(String),
+  config config_path: Option(String),
+) -> Effect(Result(Nil, String)) {
+  use client, id <- on_project(project, config_path)
+  use vars <- effect.map(api_call(api.list_env(client, id)))
+  use vars <- result.map(vars)
+
+  case vars {
+    [] ->
+      io.println_info("No variables yet. Set one with `giolt env set <NAME>`.")
+    _ -> list.each(api.describe_env(vars), stdio.println)
+  }
+}
+
+// The value is read from standard input, never taken as an argument, so it
+// doesn't land in shell history or the process list.
+pub fn set_env(
+  name name: String,
+  secret secret: Bool,
+  project project: Option(String),
+  config config_path: Option(String),
+) -> Effect(Result(Nil, String)) {
+  case config.is_env_name(name) {
+    False ->
+      effect.resolve(Error(
+        "`"
+        <> name
+        <> "` is not a variable name. Use upper-case letters, digits and "
+        <> "underscores, start with a letter or underscore, and don't start "
+        <> "with GIOLT_.",
+      ))
+    True -> {
+      use client, id <- on_project(project, config_path)
+      let prompt = case process.is_interactive() {
+        True -> "Value for " <> name <> ": "
+        False -> ""
+      }
+      use value <- effect.await(process.read_line(prompt))
+      case value {
+        "" -> effect.resolve(Error("No value on stdin."))
+        _ -> {
+          let setting = api.set_env(client, id, name:, value:, secret:)
+          use set <- effect.map(api_call(setting))
+          use _ <- result.map(set)
+          io.println_success(
+            "Set " <> name <> ". It reaches the app on the next deploy.",
+          )
+          io.println_info(
+            "The app only receives it if `env` under [tools.giolt] lists it.",
+          )
+        }
+      }
+    }
+  }
+}
+
+pub fn remove_env(
+  name name: String,
+  project project: Option(String),
+  config config_path: Option(String),
+) -> Effect(Result(Nil, String)) {
+  use client, id <- on_project(project, config_path)
+  use removed <- effect.map(api_call(api.delete_env(client, id, name)))
+  use _ <- result.map(removed)
+  io.println_success(
+    "Removed " <> name <> ". The app keeps it until the next deploy.",
+  )
+}
+
+// The project a variable command acts on: `--project`, or the one `giolt
+// link` stored. Like the other account commands, the token only goes to the
+// server the session names, never to `api_url` from gleam.toml.
+fn on_project(
+  project: Option(String),
+  config_path: Option(String),
+  next: fn(api.Client, Int) -> Effect(Result(Nil, String)),
+) -> Effect(Result(Nil, String)) {
+  use _, client <- signed_in()
+  case project {
+    Some(name) -> {
+      use found <- effect.try_await(api_call(api.find_project(client, name)))
+      next(client, found.id)
+    }
+    None ->
+      case read_config(config_path, None) {
+        Error(message) -> effect.resolve(Error(message))
+        Ok(parsed) ->
+          case parsed.project {
+            Some(id) -> next(client, id)
+            None ->
+              effect.resolve(Error(
+                "No project chosen. Run `giolt link <name>` or pass `--project <name>`.",
+              ))
+          }
+      }
   }
 }
 

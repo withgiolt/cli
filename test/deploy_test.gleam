@@ -4,6 +4,7 @@ import giolt/internal/config
 import giolt/internal/credentials.{type Credential, Credential}
 import giolt/internal/deploy.{Lookup, MissingToken, NoProject, Ready, ToProject}
 import gleam/bit_array
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
@@ -117,6 +118,7 @@ pub fn plan_carries_the_artifact_and_flags_test() {
       assets_only: False,
       preview: True,
       spa: False,
+      env: [],
     )
 }
 
@@ -239,4 +241,25 @@ pub fn assets_only_files_uploads_every_file_as_an_asset_test() {
 pub fn assets_only_files_reports_an_unreadable_directory_test() {
   assert deploy.assets_only_files("./no_such_site_dir")
     == Error(deploy.CannotReadArtifact("./no_such_site_dir"))
+}
+
+pub fn plan_carries_the_declared_env_test() {
+  let config =
+    deploy.new()
+    |> deploy.env(["DATABASE_URL"])
+    |> deploy.artifact("./dist")
+
+  assert deploy.plan(config).env == ["DATABASE_URL"]
+}
+
+// The platform hands an app only the variables named here.
+pub fn the_deploy_body_names_the_declared_env_test() {
+  let plan =
+    deploy.new()
+    |> deploy.artifact("./dist")
+    |> deploy.env(["API_KEY", "REGION"])
+    |> deploy.plan
+
+  assert json.to_string(deploy.deploy_body(plan, [], []))
+    == "{\"preview\":false,\"spa\":false,\"modules\":[],\"assets\":[],\"env\":[\"API_KEY\",\"REGION\"]}"
 }

@@ -1,5 +1,6 @@
 import giolt/internal/config.{Erlang, Javascript}
 import gleam/option.{None, Some}
+import gleam/string
 
 pub fn gleam_toml_with_a_byte_order_mark_is_read_test() {
   let assert Ok(config) =
@@ -127,6 +128,7 @@ pub fn every_key_is_read_from_tools_giolt_test() {
         prebuild: Some("gleam run -m docs/build"),
         artifact: Some("./site"),
         project: Some(42),
+        env: [],
         dependencies: [],
       ),
     )
@@ -320,4 +322,49 @@ pub fn dependency_names_exclude_dev_dependencies_test() {
 pub fn dependencies_that_are_not_a_table_are_rejected_test() {
   assert config.parse("name = \"my_app\"\ndependencies = 3\n")
     == Error(config.InvalidValue(key: "dependencies", expected: "a table"))
+}
+
+fn with_tools(settings: String) {
+  config.parse("name = \"my_app\"\n[tools.giolt]\n" <> settings <> "\n")
+}
+
+pub fn env_lists_the_declared_variables_once_test() {
+  let assert Ok(parsed) =
+    with_tools("env = [\"DATABASE_URL\", \"API_KEY\", \"DATABASE_URL\"]")
+
+  assert parsed.env == ["DATABASE_URL", "API_KEY"]
+}
+
+pub fn env_defaults_to_none_test() {
+  let assert Ok(parsed) = with_tools("")
+  assert parsed.env == []
+}
+
+// The platform would refuse these too, but only after the build.
+pub fn env_rejects_a_malformed_name_test() {
+  assert with_tools("env = [\"API_KEY\", \"api-key\"]")
+    == Error(config.InvalidEnvName("api-key"))
+  assert with_tools("env = [\"9LIVES\"]")
+    == Error(config.InvalidEnvName("9LIVES"))
+  assert with_tools("env = [\"GIOLT_X\"]")
+    == Error(config.InvalidEnvName("GIOLT_X"))
+}
+
+pub fn env_must_be_a_list_of_strings_test() {
+  assert with_tools("env = \"API_KEY\"")
+    == Error(config.InvalidValue(
+      key: "env",
+      expected: "a list of variable names",
+    ))
+}
+
+pub fn env_names_follow_the_platform_rule_test() {
+  assert config.is_env_name("A")
+  assert config.is_env_name("_PRIVATE_1")
+  assert !config.is_env_name("")
+  assert !config.is_env_name("a")
+  assert !config.is_env_name("A B")
+  assert !config.is_env_name("A\nB")
+  assert config.is_env_name(string.repeat("A", 64))
+  assert !config.is_env_name(string.repeat("A", 65))
 }

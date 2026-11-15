@@ -27,6 +27,14 @@ pub type Command {
   RenameProject(from: String, to: String)
   DeleteProject(name: String, yes: Bool)
   ShowUsage(json: Bool)
+  ListEnv(project: Option(String), config: Option(String))
+  SetEnv(
+    name: String,
+    secret: Bool,
+    project: Option(String),
+    config: Option(String),
+  )
+  RemoveEnv(name: String, project: Option(String), config: Option(String))
   Help
 }
 
@@ -38,7 +46,7 @@ pub type Outcome {
 
 const command_names = [
   "build", "dev", "deploy", "link", "unlink", "login", "logout", "whoami",
-  "projects", "usage", "help",
+  "projects", "env", "usage", "help",
 ]
 
 pub fn parse(args: List(String)) -> Outcome {
@@ -74,6 +82,7 @@ fn command() -> clip.Command(Command) {
     #("logout", plain(Logout, "logout", "Revoke and remove the token")),
     #("whoami", plain(Whoami, "whoami", "Show who the token belongs to")),
     #("projects", projects_command()),
+    #("env", env_command()),
     #("usage", usage_command()),
     #("help", plain(Help, "help", "Show this help")),
   ])
@@ -206,6 +215,79 @@ fn projects_command() -> clip.Command(Command) {
     "giolt projects",
     "List your projects, or create, rename or delete one",
   ))
+}
+
+fn env_command() -> clip.Command(Command) {
+  clip.subcommands_with_default(
+    [
+      #(
+        "set",
+        clip.command(fn(name) {
+          fn(secret) {
+            fn(project) {
+              fn(config) {
+                SetEnv(
+                  name:,
+                  secret:,
+                  project: option.from_result(project),
+                  config: option.from_result(config),
+                )
+              }
+            }
+          }
+        })
+          |> clip.arg(arg.new("name") |> arg.help("The variable, like API_KEY"))
+          |> clip.flag(
+            flag.new("secret")
+            |> flag.help("Never show the value again after it is set"),
+          )
+          |> clip.opt(env_project_opt())
+          |> clip.opt(config_opt())
+          |> clip.help(help.simple(
+            "giolt env set",
+            "Set a variable, reading its value from standard input",
+          )),
+      ),
+      #(
+        "rm",
+        clip.command(fn(name) {
+          fn(project) {
+            fn(config) {
+              RemoveEnv(
+                name:,
+                project: option.from_result(project),
+                config: option.from_result(config),
+              )
+            }
+          }
+        })
+          |> clip.arg(arg.new("name") |> arg.help("The variable to remove"))
+          |> clip.opt(env_project_opt())
+          |> clip.opt(config_opt())
+          |> clip.help(help.simple("giolt env rm", "Remove a variable")),
+      ),
+    ],
+    clip.command(fn(project) {
+      fn(config) {
+        ListEnv(
+          project: option.from_result(project),
+          config: option.from_result(config),
+        )
+      }
+    })
+      |> clip.opt(env_project_opt())
+      |> clip.opt(config_opt()),
+  )
+  |> clip.help(help.simple(
+    "giolt env",
+    "List, set and remove a project's environment variables",
+  ))
+}
+
+fn env_project_opt() -> opt.Opt(Result(String, Nil)) {
+  opt.new("project")
+  |> opt.help("Use this project instead of the linked one")
+  |> opt.optional
 }
 
 fn plain(

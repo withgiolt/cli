@@ -403,3 +403,57 @@ pub fn a_created_deployment_is_decoded_test() {
   assert api.parse_json(201, body, api.deployed_decoder())
     == Ok(api.Deployed(id: "v1", url: "https://blog.giolt.app", preview: False))
 }
+
+pub fn env_requests_address_the_project_and_the_name_test() {
+  let assert Ok(listing) = api.list_env_request(client, 7)
+  let assert Ok(set) =
+    api.set_env_request(
+      client,
+      7,
+      name: "API_KEY",
+      value: "s3cret",
+      secret: True,
+    )
+  let assert Ok(delete) = api.delete_env_request(client, 7, "API_KEY")
+
+  assert listing.method == http.Get
+  assert listing.path == "/api/v1/projects/7/env"
+  assert set.method == http.Put
+  assert set.path == "/api/v1/projects/7/env/API_KEY"
+  assert set.body == "{\"value\":\"s3cret\",\"secret\":true}"
+  assert delete.method == http.Delete
+  assert delete.path == "/api/v1/projects/7/env/API_KEY"
+}
+
+// A value must never travel in the URL, where servers and proxies log it.
+pub fn a_value_only_travels_in_the_body_test() {
+  let assert Ok(set) =
+    api.set_env_request(
+      client,
+      7,
+      name: "API_KEY",
+      value: "s3cret",
+      secret: True,
+    )
+
+  assert !string.contains(set.path, "s3cret")
+  assert set.query == option.None
+}
+
+pub fn an_env_list_is_decoded_and_a_secret_has_no_value_test() {
+  let body =
+    "{\"data\":[{\"name\":\"API_KEY\",\"secret\":true,\"value\":null,"
+    <> "\"updated_at\":\"2026-11-15T00:00:00Z\"},"
+    <> "{\"name\":\"REGION\",\"secret\":false,\"value\":\"eu\","
+    <> "\"updated_at\":\"2026-11-15T00:00:00Z\"}]}"
+
+  let assert Ok(vars) =
+    api.parse_json(200, body, api.list_decoder(api.env_var_decoder()))
+
+  assert vars
+    == [
+      api.EnvVar(name: "API_KEY", secret: True, value: option.None),
+      api.EnvVar(name: "REGION", secret: False, value: option.Some("eu")),
+    ]
+  assert api.describe_env(vars) == ["API_KEY  (secret)", "REGION   eu"]
+}
