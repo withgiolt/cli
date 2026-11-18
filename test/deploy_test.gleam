@@ -148,7 +148,7 @@ pub fn describe_error_missing_token_test() {
 
 pub fn describe_error_no_project_test() {
   assert deploy.describe_error(NoProject)
-    == "No project to deploy to. Run `giolt link <name>` or pass `--project <name>`."
+    == "No project linked. Run `giolt link <name>` or pass `--project <name>`."
 }
 
 pub fn describe_error_prints_the_api_message_test() {

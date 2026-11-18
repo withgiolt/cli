@@ -332,7 +332,7 @@ pub fn describe_error(error: Error) -> String {
       <> "` to a token from the dashboard's Tokens page."
 
     NoProject ->
-      "No project to deploy to. Run `giolt link <name>` or pass `--project <name>`."
+      "No project linked. Run `giolt link <name>` or pass `--project <name>`."
 
     Api(error) -> api.describe_error(error)
 
