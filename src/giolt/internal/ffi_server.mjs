@@ -105,8 +105,15 @@ async function readRequestBody(req) {
 let loadedWorker = { version: -1, worker: null };
 
 // Shaped like the capability object Giolt passes as `fetch`'s second
-// argument when deployed: frozen, empty and without a prototype.
-const devPlatform = Object.freeze(Object.create(null));
+// argument when deployed: frozen and without a prototype, holding the
+// declared environment variables as strings.
+let devPlatform = Object.freeze(Object.create(null));
+
+export function set_vars(vars) {
+  const platform = Object.create(null);
+  for (const [name, value] of vars.toArray()) platform[name] = value;
+  devPlatform = Object.freeze(platform);
+}
 
 // Bun ignores the query string when caching ES modules, so each version is
 // imported from its own temporary copy next to the bundle.

@@ -22,7 +22,12 @@ type Artifact {
 }
 
 pub opaque type Config(has_artifact) {
-  Config(artifact: Option(Artifact), preview: Bool, spa: Bool)
+  Config(
+    artifact: Option(Artifact),
+    preview: Bool,
+    spa: Bool,
+    env: List(String),
+  )
 }
 
 pub type Destination {
@@ -45,7 +50,13 @@ pub type Error {
 }
 
 pub type Plan {
-  Plan(artifact_dir: String, assets_only: Bool, preview: Bool, spa: Bool)
+  Plan(
+    artifact_dir: String,
+    assets_only: Bool,
+    preview: Bool,
+    spa: Bool,
+    env: List(String),
+  )
 }
 
 const default_artifact_dir = "./dist"
@@ -55,7 +66,7 @@ const default_artifact_dir = "./dist"
 const static_subdir = "static"
 
 pub fn new() -> Config(NoArtifact) {
-  Config(artifact: None, preview: False, spa: False)
+  Config(artifact: None, preview: False, spa: False, env: [])
 }
 
 pub fn artifact(
@@ -83,8 +94,8 @@ fn set_artifact(
   config: Config(has_artifact),
   artifact: Artifact,
 ) -> Config(HasArtifact) {
-  let Config(preview:, spa:, ..) = config
-  Config(artifact: Some(artifact), preview:, spa:)
+  let Config(preview:, spa:, env:, ..) = config
+  Config(artifact: Some(artifact), preview:, spa:, env:)
 }
 
 pub fn preview(
@@ -99,6 +110,15 @@ pub fn preview(
 /// artifact: Giolt rejects it alongside worker modules.
 pub fn spa(config: Config(has_artifact), is_spa: Bool) -> Config(has_artifact) {
   Config(..config, spa: is_spa)
+}
+
+/// The names of the project's environment variables the app reads. Giolt
+/// hands the app only these.
+pub fn env(
+  config: Config(has_artifact),
+  names: List(String),
+) -> Config(has_artifact) {
+  Config(..config, env: names)
 }
 
 // GIOLT_TOKEN goes to GIOLT_API_URL or the configured `api_url`. A stored
@@ -154,6 +174,7 @@ pub fn plan(config: Config(HasArtifact)) -> Plan {
     assets_only: is_assets_only(config.artifact),
     preview: config.preview,
     spa: config.spa,
+    env: config.env,
   )
 }
 
@@ -281,7 +302,7 @@ fn strip_trailing_slash(path: String) -> String {
   }
 }
 
-fn deploy_body(
+pub fn deploy_body(
   plan: Plan,
   modules: List(#(String, String)),
   assets: List(#(String, String)),
@@ -291,6 +312,7 @@ fn deploy_body(
     #("spa", json.bool(plan.spa)),
     #("modules", json.array(modules, file_json)),
     #("assets", json.array(assets, file_json)),
+    #("env", json.array(plan.env, json.string)),
   ])
 }
 

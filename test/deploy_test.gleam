@@ -4,6 +4,7 @@ import giolt/internal/config
 import giolt/internal/credentials.{type Credential, Credential}
 import giolt/internal/deploy.{Lookup, MissingToken, NoProject, Ready, ToProject}
 import gleam/bit_array
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
@@ -117,6 +118,7 @@ pub fn plan_carries_the_artifact_and_flags_test() {
       assets_only: False,
       preview: True,
       spa: False,
+      env: [],
     )
 }
 
@@ -192,6 +194,26 @@ pub fn artifact_files_splits_modules_from_static_assets_test() {
     ]
   assert assets
     == [#("sub/x.css", bit_array.base64_encode(<<"body{}":utf8>>, True))]
+}
+
+pub fn the_body_declares_the_env_names_test() {
+  let plan =
+    deploy.new()
+    |> deploy.artifact("./dist")
+    |> deploy.env(["DATABASE_URL", "API_KEY"])
+    |> deploy.plan
+
+  let body = json.to_string(deploy.deploy_body(plan, [], []))
+
+  assert string.contains(body, "\"env\":[\"DATABASE_URL\",\"API_KEY\"]")
+}
+
+pub fn the_body_declares_no_env_by_default_test() {
+  let plan = deploy.new() |> deploy.artifact("./dist") |> deploy.plan
+
+  let body = json.to_string(deploy.deploy_body(plan, [], []))
+
+  assert string.contains(body, "\"env\":[]")
 }
 
 pub fn plan_carries_spa_flag_test() {

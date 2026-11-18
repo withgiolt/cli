@@ -33,6 +33,10 @@ pub type Deployed {
   Deployed(id: String, url: String, preview: Bool)
 }
 
+pub type EnvVar {
+  EnvVar(name: String, secret: Bool, value: Option(String), updated_at: String)
+}
+
 pub type Me {
   Me(
     email: String,
@@ -166,6 +170,38 @@ pub fn create_deployment(
   )
 }
 
+pub fn list_env(
+  client: Client,
+  project_id: Int,
+) -> Effect(Result(List(EnvVar), Error)) {
+  send_json(
+    client.api_url,
+    list_env_request(client, project_id),
+    list_decoder(env_var_decoder()),
+  )
+}
+
+pub fn set_env(
+  client: Client,
+  project_id: Int,
+  name: String,
+  value: String,
+  secret: Bool,
+) -> Effect(Result(Nil, Error)) {
+  send_empty(
+    client.api_url,
+    set_env_request(client, project_id, name, value, secret),
+  )
+}
+
+pub fn delete_env(
+  client: Client,
+  project_id: Int,
+  name: String,
+) -> Effect(Result(Nil, Error)) {
+  send_empty(client.api_url, delete_env_request(client, project_id, name))
+}
+
 pub fn usage(client: Client) -> Effect(Result(Usage, Error)) {
   send_json(client.api_url, usage_request(client), usage_decoder())
 }
@@ -250,6 +286,33 @@ pub fn create_deployment_request(
   )
 }
 
+pub fn list_env_request(
+  client: Client,
+  project_id: Int,
+) -> Result(Request(String), Error) {
+  build(client, http.Get, project_path(project_id) <> "/env", None)
+}
+
+pub fn set_env_request(
+  client: Client,
+  project_id: Int,
+  name: String,
+  value: String,
+  secret: Bool,
+) -> Result(Request(String), Error) {
+  let body =
+    json.object([#("value", json.string(value)), #("secret", json.bool(secret))])
+  build(client, http.Put, env_path(project_id, name), Some(body))
+}
+
+pub fn delete_env_request(
+  client: Client,
+  project_id: Int,
+  name: String,
+) -> Result(Request(String), Error) {
+  build(client, http.Delete, env_path(project_id, name), None)
+}
+
 pub fn usage_request(client: Client) -> Result(Request(String), Error) {
   build(client, http.Get, "/usage", None)
 }
@@ -277,6 +340,12 @@ pub fn poll_device_login_request(
 
 fn project_path(id: Int) -> String {
   "/projects/" <> int.to_string(id)
+}
+
+// Names are checked by `env.check_name` before they get here, so they are
+// already safe in a path.
+fn env_path(project_id: Int, name: String) -> String {
+  project_path(project_id) <> "/env/" <> name
 }
 
 fn slug_body(slug: String) -> Json {
@@ -452,6 +521,14 @@ fn deployment_decoder() -> Decoder(Deployment) {
   decode.success(Deployment(url:, status:))
 }
 
+pub fn env_var_decoder() -> Decoder(EnvVar) {
+  use name <- decode.field("name", decode.string)
+  use secret <- decode.field("secret", decode.bool)
+  use value <- decode.field("value", decode.optional(decode.string))
+  use updated_at <- decode.field("updated_at", decode.string)
+  decode.success(EnvVar(name:, secret:, value:, updated_at:))
+}
+
 pub fn deployed_decoder() -> Decoder(Deployed) {
   use id <- decode.field("id", decode.string)
   use url <- decode.field("url", decode.string)
@@ -507,6 +584,38 @@ pub fn usage_json(usage: Usage) -> String {
     #("period_start", json.nullable(usage.period_start, json.string)),
     #("period_end", json.nullable(usage.period_end, json.string)),
   ])
+  |> json.to_string
+}
+
+// The API never returns a secret's value, so there is nothing to print but
+// that it is set.
+pub fn describe_env(vars: List(EnvVar)) -> List(String) {
+  let width =
+    list.fold(vars, 0, fn(width, var) {
+      int.max(width, string.length(var.name))
+    })
+
+  list.map(vars, fn(var) {
+    let shown = case var.secret, var.value {
+      True, _ | False, None -> "(secret)"
+      False, Some(value) -> value
+    }
+    string.pad_end(var.name, width, " ") <> "  " <> shown
+  })
+}
+
+pub fn env_json(vars: List(EnvVar)) -> String {
+  json.array(vars, fn(var) {
+    json.object([
+      #("name", json.string(var.name)),
+      #("secret", json.bool(var.secret)),
+      #("value", case var.secret {
+        True -> json.null()
+        False -> json.nullable(var.value, json.string)
+      }),
+      #("updated_at", json.string(var.updated_at)),
+    ])
+  })
   |> json.to_string
 }
 

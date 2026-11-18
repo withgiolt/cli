@@ -78,6 +78,11 @@ pub fn read_line(_prompt: String) -> Effect(String) {
   panic as javascript_only
 }
 
+@external(javascript, "./ffi_process.mjs", "read_hidden_line")
+pub fn read_hidden_line(_prompt: String) -> Effect(String) {
+  panic as javascript_only
+}
+
 @external(javascript, "./ffi_process.mjs", "sleep")
 pub fn sleep(_milliseconds: Int) -> Effect(Nil) {
   panic as javascript_only

@@ -403,3 +403,45 @@ pub fn a_created_deployment_is_decoded_test() {
   assert api.parse_json(201, body, api.deployed_decoder())
     == Ok(api.Deployed(id: "v1", url: "https://blog.giolt.app", preview: False))
 }
+
+pub fn env_requests_address_the_project_and_name_test() {
+  let assert Ok(list) = api.list_env_request(client, 7)
+  let assert Ok(set) = api.set_env_request(client, 7, "API_KEY", "k\"1", True)
+  let assert Ok(delete) = api.delete_env_request(client, 7, "API_KEY")
+
+  assert list.method == http.Get
+  assert list.path == "/api/v1/projects/7/env"
+  assert set.method == http.Put
+  assert set.path == "/api/v1/projects/7/env/API_KEY"
+  assert set.body == "{\"value\":\"k\\\"1\",\"secret\":true}"
+  assert delete.method == http.Delete
+  assert delete.path == "/api/v1/projects/7/env/API_KEY"
+}
+
+pub fn an_env_list_is_decoded_test() {
+  let body =
+    "{\"data\":[{\"name\":\"REGION\",\"secret\":false,\"value\":\"eu\","
+    <> "\"updated_at\":\"2026-11-18T10:00:00Z\"},"
+    <> "{\"name\":\"API_KEY\",\"secret\":true,\"value\":null,"
+    <> "\"updated_at\":\"2026-11-18T10:00:00Z\"}]}"
+
+  assert api.parse_json(200, body, api.list_decoder(api.env_var_decoder()))
+    == Ok([
+      api.EnvVar("REGION", False, Some("eu"), "2026-11-18T10:00:00Z"),
+      api.EnvVar("API_KEY", True, None, "2026-11-18T10:00:00Z"),
+    ])
+}
+
+pub fn a_secret_is_never_printed_test() {
+  let vars = [
+    api.EnvVar("REGION", False, Some("eu"), "t"),
+    api.EnvVar("API_KEY", True, Some("leaked"), "t"),
+  ]
+
+  assert api.describe_env(vars) == ["REGION   eu", "API_KEY  (secret)"]
+}
+
+pub fn env_json_keeps_the_api_field_names_test() {
+  assert api.env_json([api.EnvVar("API_KEY", True, Some("leaked"), "t")])
+    == "[{\"name\":\"API_KEY\",\"secret\":true,\"value\":null,\"updated_at\":\"t\"}]"
+}
