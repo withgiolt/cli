@@ -31,18 +31,19 @@ from a pure function in `src/giolt/internal/`, each with a matching
 | `esbuild_bin.gleam` | Installing and running the esbuild binary |
 | `npm.gleam` + `ffi_npm.mjs` | Installing listed files from an npm tarball into a versioned directory under `build/dev/bin`, all of them or none |
 | `bundle.gleam` | Bundling the compiled entry into `outdir` with the worker shim, plus static assets |
-| `deploy.gleam` | Choosing the deploy's project and token (`route`), then posting the deploy to the Giolt API |
+| `deploy.gleam` | Choosing the deploy's project and token (`route`), then posting the deploy, with the `env` names it declares, to the Giolt API |
+| `env.gleam` | The environment variable name rules (kept in step with the platform's `env_var.gleam`) and which declared values `dev` hands the app, the shell winning over `.env` |
 | `link.gleam` | Setting and removing `project` under `[tools.giolt]` as a text edit |
 | `rerun.gleam` | On Erlang: picking Node or Bun and the `gleam run --target javascript` arguments that re-run the CLI there |
 | `effect.gleam` + `ffi_effect.mjs` + `giolt_ffi_effect.erl` | `Effect(a)`, the command flow's result: a Promise on JavaScript, the plain value on Erlang, so the package compiles for an Erlang-target consumer |
 | `api.gleam` + `ffi_api.mjs` | The `/api/v1` client: requests, response and error decoding, the device-login poll step, what a failed revoke means, which login URLs may be opened |
 | `credentials.gleam` + `ffi_credentials.mjs` | Where `credentials.json` lives, reading and writing it, and choosing between it and `GIOLT_TOKEN` |
 | `confirm.gleam` | Whether `projects delete` proceeds, asks you to type the name, or refuses |
-| `shim.gleam` | The worker entry template esbuild bundles |
-| `server.gleam` + `ffi_server.mjs` | The dev HTTP server (assets, hot reload of the JavaScript bundle or of afterglow's `app.wasm` through `host.mjs`, live-reload SSE) |
+| `shim.gleam` | The worker entry template esbuild bundles, which copies the platform object's string values into `process.env` |
+| `server.gleam` + `ffi_server.mjs` | The dev HTTP server (assets, hot reload of the JavaScript bundle or of afterglow's `app.wasm` through `host.mjs`, live-reload SSE, the declared env vars as the platform object) |
 | `static_path.gleam` | Percent-decoding a dev server request path, refusing malformed and NUL-byte paths |
 | `watcher.gleam` + `ffi_watcher.mjs` | Recursive file watching |
-| `process.gleam` + `ffi_process.mjs` + `giolt_ffi_process.erl` | Running subprocesses and shell hooks, capturing a command's output, probing tools, reading a line from stdin, opening a URL, sleeping, exiting |
+| `process.gleam` + `ffi_process.mjs` + `giolt_ffi_process.erl` | Running subprocesses and shell hooks, capturing a command's output, probing tools, reading a line from stdin (with echo off for a secret), opening a URL, sleeping, exiting |
 | `io.gleam` | Styled output and the glitzer progress line |
 | `esgleam/` | Vendored (Apache-2.0, forked) esbuild platform detection and tarball extraction only; do not add unrelated code here |
 
@@ -92,11 +93,6 @@ only reads, writes and calls it.
   worker. There is no `handle` check or bundling, and it works for either target.
 - **Hooks are command strings.** `prebuild` runs through the shell before every
   build, including each `dev` rebuild. There is no closure API.
-- **No env-var handling beyond the API.** `GIOLT_TOKEN` (authentication) and
-  `GIOLT_API_URL` (overrides `api_url`) are read in `commands.gleam` and passed
-  to `deploy.route` and, for the account commands, `credentials.resolve`. `XDG_CONFIG_HOME` and
-  `APPDATA` only locate `credentials.json`. No `.env` loading, no
-  `PUBLIC_`/`PRIVATE_` inlining.
 - **No glob or ignore matching in `dev`.** `watch` takes directories.
 - **Node 20+ and Bun are the supported runtimes** (`gleam run -m giolt` and
   `gleam run --runtime bun -m giolt`); Deno is not supported. On Erlang the
@@ -112,6 +108,9 @@ only reads, writes and calls it.
   entry the platform wraps.
 - **The platform's capabilities arrive as `fetch`'s second argument.** The
   shim keeps them under `Symbol.for("giolt.platform")` and never reads `env`.
+  It copies the object's string values, the declared environment variables,
+  into `process.env`, creating a `process` with only `env` on a Worker, so env
+  packages read them without giolt code.
   The platform passes one frozen object to every request, so a request never
   sees another's through that global. afterglow's entry passes only the
   object's string values to the Wasm, as vars, so a capability that is a

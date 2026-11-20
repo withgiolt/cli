@@ -27,6 +27,15 @@ pub type Command {
   RenameProject(from: String, to: String)
   DeleteProject(name: String, yes: Bool)
   ShowUsage(json: Bool)
+  ListEnv(json: Bool, project: Option(String), config: Option(String))
+  SetEnv(
+    name: String,
+    value: Option(String),
+    secret: Bool,
+    project: Option(String),
+    config: Option(String),
+  )
+  DeleteEnv(name: String, project: Option(String), config: Option(String))
   Help
 }
 
@@ -38,7 +47,7 @@ pub type Outcome {
 
 const command_names = [
   "build", "dev", "deploy", "link", "unlink", "login", "logout", "whoami",
-  "projects", "usage", "help",
+  "projects", "env", "usage", "help",
 ]
 
 pub fn parse(args: List(String)) -> Outcome {
@@ -74,6 +83,7 @@ fn command() -> clip.Command(Command) {
     #("logout", plain(Logout, "logout", "Revoke and remove the token")),
     #("whoami", plain(Whoami, "whoami", "Show who the token belongs to")),
     #("projects", projects_command()),
+    #("env", env_command()),
     #("usage", usage_command()),
     #("help", plain(Help, "help", "Show this help")),
   ])
@@ -206,6 +216,109 @@ fn projects_command() -> clip.Command(Command) {
     "giolt projects",
     "List your projects, or create, rename or delete one",
   ))
+}
+
+fn env_command() -> clip.Command(Command) {
+  let list_command =
+    clip.command(fn(json) {
+      fn(project) {
+        fn(config) {
+          ListEnv(
+            json:,
+            project: option.from_result(project),
+            config: option.from_result(config),
+          )
+        }
+      }
+    })
+    |> clip.flag(
+      flag.new("json") |> flag.help("Print the variables as JSON, for scripts"),
+    )
+    |> clip.opt(env_project_opt())
+    |> clip.opt(config_opt())
+
+  clip.subcommands_with_default(
+    [
+      #(
+        "list",
+        list_command
+          |> clip.help(help.simple(
+            "giolt env list",
+            "List the project's environment variables",
+          )),
+      ),
+      #(
+        "set",
+        clip.command(fn(name) {
+          fn(value) {
+            fn(secret) {
+              fn(project) {
+                fn(config) {
+                  SetEnv(
+                    name:,
+                    value: option.from_result(value),
+                    secret:,
+                    project: option.from_result(project),
+                    config: option.from_result(config),
+                  )
+                }
+              }
+            }
+          }
+        })
+          |> clip.arg(
+            arg.new("name") |> arg.help("The variable, such as API_KEY"),
+          )
+          |> clip.arg(
+            arg.new("value")
+            |> arg.help("Its value. Leave it out to read one line from stdin")
+            |> arg.optional,
+          )
+          |> clip.flag(
+            flag.new("secret")
+            |> flag.help("Never show the value again after it is set"),
+          )
+          |> clip.opt(env_project_opt())
+          |> clip.opt(config_opt())
+          |> clip.help(help.simple(
+            "giolt env set",
+            "Set an environment variable; it reaches the app on the next deploy",
+          )),
+      ),
+      #(
+        "delete",
+        clip.command(fn(name) {
+          fn(project) {
+            fn(config) {
+              DeleteEnv(
+                name:,
+                project: option.from_result(project),
+                config: option.from_result(config),
+              )
+            }
+          }
+        })
+          |> clip.arg(arg.new("name") |> arg.help("The variable to delete"))
+          |> clip.opt(env_project_opt())
+          |> clip.opt(config_opt())
+          |> clip.help(help.simple(
+            "giolt env delete",
+            "Delete an environment variable; the live app keeps it until the next deploy",
+          )),
+      ),
+    ],
+    list_command,
+  )
+  |> clip.help(help.simple(
+    "giolt env",
+    "List the project's environment variables, or set or delete one",
+  ))
+}
+
+fn env_project_opt() -> opt.Opt(Result(String, Nil)) {
+  opt.new("project")
+  |> opt.help("Use this project instead of the linked one")
+  |> opt.optional
 }
 
 fn plain(

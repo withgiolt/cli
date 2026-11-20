@@ -9,12 +9,35 @@ const template =
 import * as conversation from \"../conversation/conversation.mjs\";
 import * as app from \"{entry}\";
 
+// Env packages such as envie and envoy read `process.env`, and a Worker has
+// no `process`, so the platform's string values are copied there. On a Worker
+// they exist from the first request on, not while modules load. `giolt dev` passes a new
+// object after each rebuild and imports a fresh copy of this module into the
+// same process, so the names copied last time live on `globalThis`, and one
+// the new object lacks is removed.
+const exposedKey = Symbol.for(\"giolt.exposedEnv\");
+
+function exposeEnv(platform) {
+  const vars = Object.entries(platform ?? {}).filter(
+    ([, value]) => typeof value === \"string\",
+  );
+  const exposed = globalThis[exposedKey] ?? [];
+  if (vars.length === 0 && exposed.length === 0) return;
+  globalThis.process ??= {};
+  globalThis.process.env ??= {};
+  const env = globalThis.process.env;
+  for (const name of exposed) delete env[name];
+  for (const [name, value] of vars) env[name] = value;
+  globalThis[exposedKey] = vars.map(([name]) => name);
+}
+
 export default {
   // Giolt passes its platform capabilities as the second argument, never
   // `env`. They are kept under a registered symbol so that a library bundled
   // with the app can reach them without importing this entry.
   async fetch(request, platform, _ctx) {
     globalThis[Symbol.for(\"giolt.platform\")] = platform;
+    exposeEnv(platform);
 
     if (typeof app.handle !== \"function\") {
       return new Response(

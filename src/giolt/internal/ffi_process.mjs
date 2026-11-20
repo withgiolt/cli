@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { default as process } from "node:process";
 import { createInterface } from "node:readline";
+import { Writable } from "node:stream";
 import { Ok, Error as GleamError } from "../../gleam.mjs";
 
 function finish(child, describe) {
@@ -97,10 +98,40 @@ export function read_line(prompt) {
     output: process.stdout,
   });
 
+  // `question` drops a last line with no newline, as `printf %s "$TOKEN"`
+  // pipes in; the `line` event still delivers it.
   return new Promise((resolve) => {
     prompter.on("SIGINT", () => prompter.close());
     prompter.on("close", () => resolve(""));
-    prompter.question(prompt, (answer) => {
+    prompter.once("line", (answer) => {
+      resolve(answer);
+      prompter.close();
+    });
+    prompter.setPrompt(prompt);
+    prompter.prompt();
+  });
+}
+
+// Like read_line, but typed characters aren't echoed, so a secret doesn't stay
+// on screen or in the scrollback. Piped input has nothing to hide.
+export function read_hidden_line(prompt) {
+  if (!process.stdin.isTTY) return read_line("");
+
+  process.stdout.write(prompt);
+  const discard = new Writable({ write: (_chunk, _encoding, done) => done() });
+  const prompter = createInterface({
+    input: process.stdin,
+    output: discard,
+    terminal: true,
+  });
+
+  return new Promise((resolve) => {
+    prompter.on("SIGINT", () => prompter.close());
+    prompter.on("close", () => {
+      process.stdout.write("\n");
+      resolve("");
+    });
+    prompter.once("line", (answer) => {
       resolve(answer);
       prompter.close();
     });

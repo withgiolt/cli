@@ -88,3 +88,15 @@ pub fn render_keeps_the_platform_argument_test() {
     "globalThis[Symbol.for(\"giolt.platform\")] = platform;",
   )
 }
+
+// Env packages read `process.env`, so the platform's string values are copied
+// there before the app runs.
+pub fn render_exposes_the_platform_vars_before_handle_test() {
+  let rendered = shim.render("/home/user/app/build/dev/javascript/app/app.mjs")
+
+  let assert Ok(#(before, _)) = string.split_once(rendered, "app.handle(req)")
+  assert string.contains(before, "exposeEnv(platform);")
+  assert string.contains(rendered, "env[name] = value")
+  assert string.contains(rendered, "delete env[name]")
+  assert string.contains(rendered, "typeof value === \"string\"")
+}

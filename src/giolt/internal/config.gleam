@@ -1,3 +1,4 @@
+import giolt/internal/env
 import gleam/dict
 import gleam/int
 import gleam/list
@@ -29,6 +30,7 @@ pub type Config {
     artifact: Option(String),
     project: Option(Int),
     dependencies: List(String),
+    env: List(String),
   )
 }
 
@@ -40,6 +42,9 @@ pub type Error {
   InvalidEntry(String)
   InvalidPort(Int)
   SpaWithoutArtifact
+  InvalidEnvName(name: String, problem: env.NameProblem)
+  TooManyEnvNames(count: Int)
+  EnvWithArtifact
   InvalidValue(key: String, expected: String)
 }
 
@@ -64,6 +69,7 @@ pub fn default(package: String, target: Target) -> Config {
     artifact: None,
     project: None,
     dependencies: [],
+    env: [],
   )
 }
 
@@ -175,6 +181,7 @@ pub fn parse_with(
     "a list of strings",
     default_watch(defaults.watch, assets),
   ))
+  use env <- result.try(read_env(toml, defaults.env))
 
   Ok(Config(
     package:,
@@ -192,6 +199,7 @@ pub fn parse_with(
     artifact:,
     project:,
     dependencies:,
+    env:,
   ))
 }
 
@@ -232,6 +240,28 @@ fn read_entry(toml, default: String) -> Result(String, Error) {
   ))
 
   validate_module_name(entry)
+}
+
+fn read_env(toml, default: List(String)) -> Result(List(String), Error) {
+  use names <- result.try(with_default(
+    toml,
+    "env",
+    strings,
+    "a list of variable names",
+    default,
+  ))
+
+  list.try_map(names, fn(name) {
+    env.check_name(name)
+    |> result.map_error(fn(problem) { InvalidEnvName(name:, problem:) })
+  })
+  |> result.map(list.unique)
+  |> result.try(fn(names) {
+    case list.length(names) > env.max_per_project {
+      True -> Error(TooManyEnvNames(list.length(names)))
+      False -> Ok(names)
+    }
+  })
 }
 
 fn read_port(toml, default: Int) -> Result(Int, Error) {
@@ -306,6 +336,18 @@ pub fn check_spa(
   }
 }
 
+// A static site has no code to read variables, and the platform refuses a
+// static deploy that declares any.
+pub fn check_env(
+  config: Config,
+  artifact: Option(String),
+) -> Result(Nil, Error) {
+  case config.env, artifact {
+    [_, ..], Some(_) -> Error(EnvWithArtifact)
+    _, _ -> Ok(Nil)
+  }
+}
+
 pub fn describe_missing_artifact(
   path: String,
   prebuild: Option(String),
@@ -323,7 +365,11 @@ pub fn compiled_entry(config: Config) -> String {
 
 pub fn blames_settings_file(error: Error) -> Bool {
   case error {
-    InvalidToml | MissingName | UnknownTarget(_) | SpaWithoutArtifact -> False
+    InvalidToml
+    | MissingName
+    | UnknownTarget(_)
+    | SpaWithoutArtifact
+    | EnvWithArtifact -> False
     _ -> True
   }
 }
@@ -350,6 +396,20 @@ pub fn describe_error(error: Error) -> String {
     SpaWithoutArtifact ->
       "`spa` only applies to static sites. Set `artifact` under [tools.giolt] "
       <> "(or pass --artifact to `giolt deploy`), or remove `spa`."
+    InvalidEnvName(name:, problem:) ->
+      "`env` under [tools.giolt] lists `"
+      <> name
+      <> "`. "
+      <> env.describe_problem(problem)
+    TooManyEnvNames(count:) ->
+      "`env` under [tools.giolt] lists "
+      <> int.to_string(count)
+      <> " variables, and a project holds at most "
+      <> int.to_string(env.max_per_project)
+      <> "."
+    EnvWithArtifact ->
+      "`env` needs an app to read the variables, and `artifact` makes a "
+      <> "static site with none. Remove `env`, or drop `artifact` (and --artifact)."
     InvalidValue(key:, expected:) ->
       "`" <> key <> "` must be " <> expected <> "."
   }

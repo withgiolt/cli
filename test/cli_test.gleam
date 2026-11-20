@@ -270,3 +270,28 @@ pub fn command_usage_still_lists_help_test() {
 
   assert string.contains(text, "--help")
 }
+
+pub fn env_subcommands_are_recognised_test() {
+  assert cli.parse(["env"])
+    == Run(cli.ListEnv(json: False, project: None, config: None))
+  assert cli.parse(["env", "list", "--json", "--project", "blog"])
+    == Run(cli.ListEnv(json: True, project: Some("blog"), config: None))
+  assert cli.parse(["env", "set", "REGION", "eu"])
+    == Run(cli.SetEnv(
+      name: "REGION",
+      value: Some("eu"),
+      secret: False,
+      project: None,
+      config: None,
+    ))
+  assert cli.parse(["env", "set", "API_KEY", "--secret"])
+    == Run(cli.SetEnv(
+      name: "API_KEY",
+      value: None,
+      secret: True,
+      project: None,
+      config: None,
+    ))
+  assert cli.parse(["env", "delete", "REGION", "--project", "blog"])
+    == Run(cli.DeleteEnv(name: "REGION", project: Some("blog"), config: None))
+}

@@ -39,3 +39,8 @@ fn do_serve(
 pub fn notify_reload() -> Nil {
   panic as process.javascript_only
 }
+
+@external(javascript, "./ffi_server.mjs", "set_vars")
+pub fn set_vars(_vars: List(#(String, String))) -> Nil {
+  panic as process.javascript_only
+}

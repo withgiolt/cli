@@ -1,5 +1,9 @@
 import giolt/internal/config.{Erlang, Javascript}
+import giolt/internal/env
+import gleam/int
+import gleam/list
 import gleam/option.{None, Some}
+import gleam/string
 
 pub fn gleam_toml_with_a_byte_order_mark_is_read_test() {
   let assert Ok(config) =
@@ -107,6 +111,7 @@ api_url = \"http://localhost:4000\"
 prebuild = \"gleam run -m docs/build\"
 artifact = \"./site\"
 project = 42
+env = [\"DATABASE_URL\", \"API_KEY\", \"DATABASE_URL\"]
 "
 
 pub fn every_key_is_read_from_tools_giolt_test() {
@@ -128,6 +133,7 @@ pub fn every_key_is_read_from_tools_giolt_test() {
         artifact: Some("./site"),
         project: Some(42),
         dependencies: [],
+        env: ["DATABASE_URL", "API_KEY"],
       ),
     )
 }
@@ -196,6 +202,11 @@ pub fn wrongly_typed_keys_are_rejected_test() {
     == Error(config.InvalidValue(key: "artifact", expected: "a string"))
   assert parse("api_url = []")
     == Error(config.InvalidValue(key: "api_url", expected: "a string"))
+  assert parse("env = \"API_KEY\"")
+    == Error(config.InvalidValue(
+      key: "env",
+      expected: "a list of variable names",
+    ))
   assert parse("project = \"blog\"")
     == Error(config.InvalidValue(
       key: "project",
@@ -273,6 +284,64 @@ pub fn blames_settings_file_for_tools_giolt_errors_only_test() {
   assert !config.blames_settings_file(config.InvalidToml)
   assert !config.blames_settings_file(config.MissingName)
   assert !config.blames_settings_file(config.SpaWithoutArtifact)
+  assert !config.blames_settings_file(config.EnvWithArtifact)
+  assert config.blames_settings_file(config.InvalidEnvName(
+    name: "api_key",
+    problem: env.Malformed,
+  ))
+}
+
+pub fn env_names_follow_the_platform_rules_test() {
+  let parse = fn(name) {
+    config.parse(
+      "name = \"my_app\"\n[tools.giolt]\nenv = [\"" <> name <> "\"]\n",
+    )
+  }
+
+  let assert Ok(_) = parse("_PRIVATE_2")
+  let assert Ok(_) = parse(string.repeat("A", 64))
+  assert parse("api_key")
+    == Error(config.InvalidEnvName(name: "api_key", problem: env.Malformed))
+  assert parse("2FA")
+    == Error(config.InvalidEnvName(name: "2FA", problem: env.Malformed))
+  assert parse("API-KEY")
+    == Error(config.InvalidEnvName(name: "API-KEY", problem: env.Malformed))
+  assert parse("")
+    == Error(config.InvalidEnvName(name: "", problem: env.Malformed))
+  assert parse(string.repeat("A", 65))
+    == Error(config.InvalidEnvName(
+      name: string.repeat("A", 65),
+      problem: env.Malformed,
+    ))
+  assert parse("GIOLT_KEY")
+    == Error(config.InvalidEnvName(name: "GIOLT_KEY", problem: env.Reserved))
+}
+
+pub fn more_env_names_than_a_project_holds_is_rejected_test() {
+  let names = fn(count) {
+    int.range(from: 1, to: count + 1, with: [], run: fn(acc, i) { [i, ..acc] })
+    |> list.map(fn(i) { "\"VAR_" <> int.to_string(i) <> "\"" })
+    |> string.join(", ")
+  }
+  let parse = fn(count) {
+    config.parse(
+      "name = \"my_app\"\n[tools.giolt]\nenv = [" <> names(count) <> "]\n",
+    )
+  }
+
+  let assert Ok(_) = parse(64)
+  assert parse(65) == Error(config.TooManyEnvNames(65))
+}
+
+pub fn env_with_artifact_is_rejected_test() {
+  let assert Ok(with_env) =
+    config.parse("name = \"my_app\"\n[tools.giolt]\nenv = [\"API_KEY\"]\n")
+
+  assert config.check_env(with_env, Some("site"))
+    == Error(config.EnvWithArtifact)
+  assert config.check_env(with_env, None) == Ok(Nil)
+  assert config.check_env(config.default("my_app", Javascript), Some("site"))
+    == Ok(Nil)
 }
 
 pub fn spa_without_artifact_is_rejected_test() {

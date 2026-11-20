@@ -11,6 +11,7 @@ import giolt/internal/confirm
 import giolt/internal/credentials.{type Credential, type Session, Credential}
 import giolt/internal/deploy
 import giolt/internal/effect.{type Effect}
+import giolt/internal/env
 import giolt/internal/io
 import giolt/internal/link
 import giolt/internal/process
@@ -89,6 +90,7 @@ fn build_then_submit(
     artifact
     |> deploy.preview(preview)
     |> deploy.spa(config.spa)
+    |> deploy.env(config.env)
 
   // A missing token or unknown project is knowable up front; don't make the
   // user wait for a build.
@@ -222,11 +224,27 @@ fn serve_dev(
   static_dir: String,
   worker: server.Worker,
 ) -> Effect(Result(Nil, String)) {
+  // Read once, before the first request: on JavaScript the worker runs in
+  // this process, and the shim writes the vars into this `process.env`.
+  let shell = shell_vars(config.env)
+  let vars = dev_vars(config.env, shell)
+  list.each(vars.missing, fn(name) {
+    io.println_warning(
+      "`"
+      <> name
+      <> "` is in `env` but set neither in the shell nor in "
+      <> env.dotenv_path
+      <> ", so the app won't see it.",
+    )
+  })
+  use_dev_vars(vars)
+
   use _ <- effect.await(rebuild(config))
 
   let stop_watching =
     watcher.watch(config.watch, fn(paths) {
       io.println_info("Changed " <> string.join(paths, ", ") <> ", rebuilding")
+      use_dev_vars(dev_vars(config.env, shell))
       rebuild(config)
     })
 
@@ -255,6 +273,58 @@ fn rebuild(config: Config) -> Effect(Nil) {
   case result {
     Ok(Nil) -> server.notify_reload()
     Error(message) -> io.println_error(message)
+  }
+}
+
+fn use_dev_vars(vars: env.DevVars) -> Nil {
+  list.each(vars.refused, fn(refused) {
+    let #(name, problem) = refused
+    io.println_warning(
+      "`"
+      <> name
+      <> "` "
+      <> env.describe_value_problem(problem)
+      <> ", so dev leaves it out, as Giolt would.",
+    )
+  })
+  server.set_vars(vars.values)
+}
+
+fn shell_vars(names: List(String)) -> List(#(String, String)) {
+  list.filter_map(names, fn(name) {
+    envie.get(name) |> result.map(fn(value) { #(name, value) })
+  })
+}
+
+fn dev_vars(
+  declared: List(String),
+  shell: List(#(String, String)),
+) -> env.DevVars {
+  env.dev_vars(declared:, shell:, dotenv: read_dotenv())
+}
+
+fn read_dotenv() -> List(#(String, String)) {
+  case simplifile.read(env.dotenv_path) {
+    Error(_) -> []
+    Ok(text) ->
+      case envie.parse_dotenv(text) {
+        Ok(pairs) -> pairs
+        Error(errors) -> {
+          // Only line numbers: the parser's message quotes the line, which
+          // may hold a secret.
+          let lines =
+            list.map(errors, fn(error) { int.to_string(error.line) })
+            |> list.unique
+          io.println_warning(
+            "Could not parse line "
+            <> string.join(lines, ", ")
+            <> " of "
+            <> env.dotenv_path
+            <> ", so none of its values are used.",
+          )
+          []
+        }
+      }
   }
 }
 
@@ -301,8 +371,10 @@ fn read_config(
   config.parse_with(source, settings)
   |> result.try(fn(parsed) {
     // The platform rejects spa with a worker, and dev would silently ignore it.
-    config.check_spa(parsed, option.or(artifact_flag, parsed.artifact))
-    |> result.replace(parsed)
+    let artifact = option.or(artifact_flag, parsed.artifact)
+    use _ <- result.try(config.check_spa(parsed, artifact))
+    use _ <- result.try(config.check_env(parsed, artifact))
+    Ok(parsed)
   })
   |> result.map_error(fn(error) {
     case settings_path {
@@ -731,6 +803,114 @@ pub fn usage(json json: Bool) -> Effect(Result(Nil, String)) {
   case json {
     True -> stdio.println(api.usage_json(usage))
     False -> list.each(api.describe_usage(usage), stdio.println)
+  }
+}
+
+pub fn list_env(
+  json json: Bool,
+  project project: Option(String),
+  config config_path: Option(String),
+) -> Effect(Result(Nil, String)) {
+  use deploy.ToProject(id:, client:) <- for_project(project, config_path)
+  use vars <- effect.map(api_call(api.list_env(client, id)))
+  use vars <- result.map(vars)
+
+  case json, vars {
+    True, _ -> stdio.println(api.env_json(vars))
+    False, [] ->
+      io.println_info(
+        "No environment variables yet. Set one with `giolt env set <name>`.",
+      )
+    False, _ -> list.each(api.describe_env(vars), stdio.println)
+  }
+}
+
+pub fn set_env(
+  name name: String,
+  value value: Option(String),
+  secret secret: Bool,
+  project project: Option(String),
+  config config_path: Option(String),
+) -> Effect(Result(Nil, String)) {
+  use name <- with_env_name(name)
+  use deploy.ToProject(id:, client:) <- for_project(project, config_path)
+  use value <- effect.try_await(case value {
+    Some(value) -> effect.resolve(Ok(value))
+    None -> read_env_value(name, secret)
+  })
+  use set <- effect.map(api_call(api.set_env(client, id, name, value, secret)))
+  use _ <- result.map(set)
+
+  io.println_success(
+    "Set " <> name <> ". The app sees it from its next deploy.",
+  )
+}
+
+// One line, so a secret piped in from CI or typed at the prompt stays out of
+// the shell history.
+fn read_env_value(
+  name: String,
+  secret: Bool,
+) -> Effect(Result(String, String)) {
+  let prompt = case process.is_interactive() {
+    True -> "Value for " <> name <> ": "
+    False -> ""
+  }
+  let reading = case secret {
+    True -> process.read_hidden_line(prompt)
+    False -> process.read_line(prompt)
+  }
+  use line <- effect.map(reading)
+  case line {
+    "" ->
+      Error(
+        "No value for "
+        <> name
+        <> " on stdin. To set it empty, pass \"\" as the value.",
+      )
+    value -> Ok(value)
+  }
+}
+
+pub fn delete_env(
+  name name: String,
+  project project: Option(String),
+  config config_path: Option(String),
+) -> Effect(Result(Nil, String)) {
+  use name <- with_env_name(name)
+  use deploy.ToProject(id:, client:) <- for_project(project, config_path)
+  use deleted <- effect.map(api_call(api.delete_env(client, id, name)))
+  use _ <- result.map(deleted)
+
+  io.println_success(
+    "Deleted " <> name <> ". The live app keeps it until its next deploy.",
+  )
+}
+
+fn with_env_name(
+  name: String,
+  next: fn(String) -> Effect(Result(Nil, String)),
+) -> Effect(Result(Nil, String)) {
+  case env.check_name(name) {
+    Ok(name) -> next(name)
+    Error(problem) ->
+      effect.resolve(Error(
+        "`" <> name <> "` can't be used. " <> env.describe_problem(problem),
+      ))
+  }
+}
+
+fn for_project(
+  project: Option(String),
+  config_path: Option(String),
+  next: fn(deploy.Destination) -> Effect(Result(Nil, String)),
+) -> Effect(Result(Nil, String)) {
+  case read_config(config_path, None) {
+    Error(message) -> effect.resolve(Error(message))
+    Ok(config) -> {
+      use destination <- effect.try_await(deploy_destination(config, project))
+      next(destination)
+    }
   }
 }
 
